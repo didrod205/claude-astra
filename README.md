@@ -71,6 +71,8 @@ frontend-qa
   ok    sweep passes a clean page
   ok    sweep catches console errors, overflow, broken images and duplicate ids
   ok    sweep flags a page with no viewport meta
+  ok    sweep computes colour contrast and flags text below AA
+  ok    sweep flags a control with no focus style, and not one that has one
 house-style
   ok    pdf: the reference matches its own spec
   ok    pdf: a drifted file is caught on face, colour and size
@@ -280,9 +282,21 @@ qa sweep - http://127.0.0.1:56392/
     ! [a11y] 0 visible <h1> on the page
 ```
 
+```
+  x [contrast] 3 text element(s) below WCAG AA: p.faint 2.07:1 (needs 4.5) "This paragraph is too light to read."
+  ! [contrast] 1 element(s) sit on an image or gradient — contrast not verifiable, check by eye
+  ! [a11y] 1 control(s) show no visible change when focused: button.bare
+```
+
 Findings identical at every width print once, so responsive breakage stands out
 from real breakage. Read `viewport` and `console` first — until those are clean,
 nothing else in the report means what it says.
+
+Contrast and focus visibility are the two failures people assume a tool cannot
+see. Both are computable: contrast from the text colour and the first opaque
+background above it, focus by comparing an element's computed style before and
+after focusing it. Where the background is an image or a gradient the tool says
+so and declines rather than guessing.
 
 ### house-style
 

@@ -23,7 +23,7 @@
     (el.textContent || '').trim() ||
     (el.value || '').trim();
 
-  const out = { overflow: [], clipped: [], images: [], controls: [], labels: [], headings: [], targets: [], dupIds: [], deadLinks: [] };
+  const out = { overflow: [], clipped: [], images: [], controls: [], labels: [], headings: [], targets: [], dupIds: [], deadLinks: [], contrast: [], contrastSkipped: 0, focus: [] };
 
   // 1. Horizontal overflow — the body must never scroll sideways.
   const vw = document.documentElement.clientWidth;
@@ -108,6 +108,72 @@
     if (href === null || href === '' || href === '#')
       out.deadLinks.push({ el: where(a), text: (a.textContent || '').trim().slice(0, 40), href });
   }
+
+  // 8b. Colour contrast. The most common real accessibility failure, and one
+  // people assume a tool cannot see — it can, whenever the background resolves
+  // to a solid colour. Where it does not (an image or a gradient behind the
+  // text) the element is counted as unverifiable rather than guessed at.
+  const parseRGB = c => {
+    const m = /rgba?\(([^)]+)\)/.exec(c || '');
+    if (!m) return null;
+    const [r, g, b, a] = m[1].split(',').map(v => parseFloat(v));
+    return { r, g, b, a: a === undefined ? 1 : a };
+  };
+  const lum = ({ r, g, b }) => {
+    const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const effectiveBg = el => {
+    for (let n = el; n && n !== document.documentElement.parentNode; n = n.parentElement) {
+      const st = getComputedStyle(n);
+      if (st.backgroundImage && st.backgroundImage !== 'none') return 'image';
+      const c = parseRGB(st.backgroundColor);
+      if (c && c.a >= 0.95) return c;
+    }
+    return { r: 255, g: 255, b: 255, a: 1 };
+  };
+  const ownText = el => [...el.childNodes]
+    .filter(n => n.nodeType === 3 && n.textContent.trim()).map(n => n.textContent.trim()).join(' ');
+
+  for (const el of document.querySelectorAll('body *')) {
+    const t = ownText(el);
+    if (!t || !vis(el)) continue;
+    const st = getComputedStyle(el);
+    const fg = parseRGB(st.color);
+    if (!fg || fg.a < 0.95) continue;
+    const bg = effectiveBg(el);
+    if (bg === 'image') { out.contrastSkipped++; continue; }
+    const size = parseFloat(st.fontSize) || 16;
+    const bold = (parseInt(st.fontWeight, 10) || 400) >= 700;
+    const large = size >= 24 || (bold && size >= 18.66);
+    const need = large ? 3.0 : 4.5;
+    const r = ratio(fg, bg);
+    if (r < need) {
+      out.contrast.push({ el: where(el), ratio: +r.toFixed(2), need,
+                          size: Math.round(size), text: t.slice(0, 42) });
+      if (out.contrast.length > 12) break;
+    }
+  }
+
+  // 8c. Focus visibility. A control you can tab to but cannot see focused is
+  // unusable by keyboard, and `outline: none` with nothing put back is the
+  // single most common way it happens.
+  const focusables = [...document.querySelectorAll(
+    'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"]), [role="button"]')]
+    .filter(vis).slice(0, 40);
+  const active = document.activeElement;
+  for (const el of focusables) {
+    const before = getComputedStyle(el);
+    const snap = s2 => `${s2.outlineStyle}|${s2.outlineWidth}|${s2.outlineColor}|${s2.boxShadow}|${s2.borderColor}|${s2.backgroundColor}`;
+    const b0 = snap(before);
+    try { el.focus({ preventScroll: true }); } catch { continue; }
+    if (document.activeElement !== el) continue;
+    const a1 = snap(getComputedStyle(el));
+    if (a1 === b0) out.focus.push({ el: where(el), text: (el.textContent || el.value || '').trim().slice(0, 30) });
+    if (out.focus.length > 8) break;
+  }
+  try { active && active.focus && active.focus({ preventScroll: true }); } catch {}
 
   // 9. The viewport meta. Without width=device-width a phone lays the page out
   // at ~980px and scales it down, so the site is unreadable AND every width-based

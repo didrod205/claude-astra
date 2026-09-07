@@ -153,6 +153,25 @@ printf '%s' '<!doctype html><meta charset=utf-8><title>No viewport</title><style
 node frontend-qa/scripts/qa-run.mjs "$TMP/novp" --out "$TMP/qa3" --widths 390 >"$TMP/out" 2>&1
 grep -q 'viewport' "$TMP/out" && ok "sweep flags a page with no viewport meta" || { bad "viewport check did not fire"; sed 's/^/        /' "$TMP/out" | tail -5; }
 
+# Contrast and focus visibility: both computable, both commonly assumed not to be.
+mkdir -p "$TMP/a11y"
+cat > "$TMP/a11y/index.html" <<'HTML'
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>a11y fixture</title>
+<style>body{margin:0;font:16px system-ui;background:#fff;color:#111}
+ .faint{color:#adb5bd} .ok{color:#3d4852}
+ button.bare{outline:none;border:1px solid #ccc;background:#eee;padding:10px 14px}
+ button.good:focus{outline:3px solid #2b6cb0}</style>
+<h1 class=ok>Heading</h1><p class=faint>Too light to read.</p><p class=ok>Fine.</p>
+<button class=bare>No focus ring</button><button class=good>Has a focus ring</button>
+HTML
+node frontend-qa/scripts/qa-run.mjs "$TMP/a11y" --out "$TMP/qa4" --widths 1440 >"$TMP/out" 2>&1
+grep -q 'contrast.*p.faint' "$TMP/out" && ok "sweep computes colour contrast and flags text below AA" \
+  || { bad "contrast check did not fire"; sed 's/^/        /' "$TMP/out" | tail -6; }
+grep -q 'button.bare' "$TMP/out" && ! grep -q 'button.good' "$TMP/out" \
+  && ok "sweep flags a control with no focus style, and not one that has one" \
+  || { bad "focus-visibility check wrong"; sed 's/^/        /' "$TMP/out" | tail -6; }
+
 # ---------------------------------------------------------------- house-style
 head_ "house-style ${D}(style.py runs on the standard library alone)${Z}"
 if python3 -c "import fitz" 2>/dev/null; then

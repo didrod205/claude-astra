@@ -15,6 +15,7 @@ warnings mean look.
 | `overflow` | `documentElement.scrollWidth > clientWidth + 1` | the body scrolls sideways. The narrowest overflowing element is named — that's the culprit, not its stretched ancestors |
 | `image` | `naturalWidth === 0` after load | broken `src`, wrong path, or a blocked host |
 | `dom` | the same `id` twice | breaks `label[for]`, in-page anchors, and every `getElementById` after the first |
+| `contrast` | text below WCAG AA — 4.5:1, or 3:1 for large text (≥24px, or ≥18.66px bold) | computed from the text colour and the first opaque background above it. Text sitting on an image or gradient is counted as **unverifiable** and reported separately, never guessed at |
 | `probe` | probes threw | usually a CSP blocking evaluation, or the page navigated mid-run |
 
 ## Warnings
@@ -28,6 +29,7 @@ warnings mean look.
 | `link` | `href` missing, empty, or `#` | either a real dead link or a button wearing an anchor |
 | `touch` | tap target under 44×44 CSS px | **mobile widths only** (< 500px) |
 | `meta` | no `<title>` | |
+| `a11y` focus | a control whose computed style does not change when focused | `outline: none` with nothing put back. Needs `Emulation.setFocusEmulationEnabled`, which the runner turns on — without it a headless page is never window-focused, `:focus` never matches, and every focus style silently reads as absent |
 
 ## Read the findings in this order
 
@@ -48,7 +50,9 @@ The sweep is a static snapshot of the loaded page. It does not know about:
 - **Anything behind an interaction.** Menus, modals, tabs, accordions, and every
   route you have to click to reach are invisible to it. That is what the flow
   half is for.
-- **Colour contrast, visual hierarchy, overlap, z-index.** Read the screenshots.
+- **Visual hierarchy, overlap, z-index.** Read the screenshots.
+- **Contrast over an image or a gradient.** Reported as a count of unverifiable
+  elements. Judge those by eye — the tool declines rather than guessing.
 - **Whether the content is correct.** A page can be flawless and show the wrong
   price.
 - **Slow or late failures.** Raise `--wait` for a heavy SPA; a request that

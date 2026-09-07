@@ -63,6 +63,9 @@ try {
       ...(w < 500 ? { screenWidth: w, screenHeight: h } : {}),
     });
     if (w < 500) await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    // Without this a headless page is never window-focused, so `:focus` never
+    // matches and every focus style silently reads as absent.
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
 
     await goto(cdp, url, { settle: wait });
 
@@ -111,6 +114,14 @@ for (const r of runs) {
     add('error', w, 'clipped', `wider than the viewport with no way to scroll to it: ${cap(p.clipped, 4, c => `${c.el} ${c.w}px in ${p.stats.viewport}px`)}`);
   for (const i of p.images.filter(i => i.issue === 'broken')) add('error', w, 'image', `broken: ${i.el} ${i.src}`);
   for (const d of p.dupIds) add('error', w, 'dom', `duplicate id "${d.id}" x${d.count}`);
+
+  if (p.contrast?.length) {
+    const worst = [...p.contrast].sort((a, b) => a.ratio - b.ratio);
+    add('error', w, 'contrast', `${p.contrast.length} text element(s) below WCAG AA: ` +
+      cap(worst, 3, c => `${c.el} ${c.ratio}:1 (needs ${c.need}) "${c.text}"`));
+  }
+  if (p.contrastSkipped) add('warn', w, 'contrast', `${p.contrastSkipped} element(s) sit on an image or gradient — contrast not verifiable, check by eye`);
+  if (p.focus?.length) add('warn', w, 'a11y', `${p.focus.length} control(s) show no visible change when focused: ${cap(p.focus, 4, f => f.el)}`);
 
   const noAlt = p.images.filter(i => i.issue === 'no alt');
   if (noAlt.length) add('warn', w, 'a11y', `${noAlt.length} image(s) without alt: ${cap(noAlt, 4, i => i.el)}`);
