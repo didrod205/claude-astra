@@ -212,8 +212,13 @@ You get `scene/` (three files), six angles plus a cutaway plan per storey in
 all six default angles — this is what the six show you instead:
 
 <p align="center">
-  <img src="media/cabin-interior.png" width="820" alt="Interior of the bundled cabin: a lamp lighting a table and floor, a window looking onto grass, a bed with contact shadow, darkened corners">
-  <br><em>The bundled example scene from inside. Image-based sky light, ambient occlusion in the corners, and a lamp that is an actual light rather than a glowing sphere.</em>
+  <img src="media/cabin-interior.png" width="820" alt="Interior of the bundled cabin: a lamp lighting a table and floor, a window with a reveal and sill, a bed with headboard and duvet, skirting along the wall">
+  <br><em>The bundled example scene from inside — image-based sky light, ambient occlusion in the corners, and a lamp that is an actual light rather than a glowing sphere.</em>
+</p>
+
+<p align="center">
+  <img src="media/cabin-exterior.png" width="820" alt="Exterior of the same cabin: plinth course, corner boards, a door standing ajar with the lit interior showing, low-poly conifers framing rather than blocking">
+  <br><em>And from outside. A plinth to sit the walls on the ground, corner boards to break the facade, a door leaf ajar so the lit interior shows through — none of it texture.</em>
 </p>
 
 ### playable-prototype

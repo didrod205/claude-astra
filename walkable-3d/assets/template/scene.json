@@ -48,7 +48,7 @@
       "roughness": 0.94
     },
     "plaster": {
-      "color": "#e4dccc",
+      "color": "#ddd2bd",
       "roughness": 0.96
     },
     "ceiling": {
@@ -134,6 +134,18 @@
       "emissive": "#ffc98a",
       "emissiveIntensity": 4.0,
       "roughness": 0.4
+    },
+    "plinth": {
+      "color": "#9d968b",
+      "roughness": 0.95
+    },
+    "door": {
+      "color": "#6f4a2f",
+      "roughness": 0.6
+    },
+    "doortrim": {
+      "color": "#8a6240",
+      "roughness": 0.6
     }
   },
   "objects": [
@@ -862,6 +874,188 @@
             -1.2
           ],
           "material": "stone"
+        },
+        {
+          "id": "corner_0",
+          "kind": "box",
+          "size": [
+            0.13,
+            2.4899999999999998,
+            0.13
+          ],
+          "position": [
+            -3.06,
+            1.3649999999999998,
+            -2.06
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "corner_1",
+          "kind": "box",
+          "size": [
+            0.13,
+            2.4899999999999998,
+            0.13
+          ],
+          "position": [
+            3.06,
+            1.3649999999999998,
+            -2.06
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "corner_2",
+          "kind": "box",
+          "size": [
+            0.13,
+            2.4899999999999998,
+            0.13
+          ],
+          "position": [
+            -3.06,
+            1.3649999999999998,
+            2.06
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "corner_3",
+          "kind": "box",
+          "size": [
+            0.13,
+            2.4899999999999998,
+            0.13
+          ],
+          "position": [
+            3.06,
+            1.3649999999999998,
+            2.06
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "door",
+          "kind": "group",
+          "position": [
+            -1.6,
+            0.12,
+            2.08
+          ],
+          "rotation": [
+            0,
+            -26,
+            0
+          ],
+          "children": [
+            {
+              "id": "door_leaf",
+              "kind": "box",
+              "size": [
+                0.98,
+                2.04,
+                0.05
+              ],
+              "position": [
+                0.49,
+                1.02,
+                0
+              ],
+              "material": "door",
+              "solid": true
+            },
+            {
+              "id": "door_rail",
+              "kind": "box",
+              "size": [
+                0.9,
+                0.09,
+                0.07
+              ],
+              "position": [
+                0.49,
+                0.72,
+                0.02
+              ],
+              "material": "doortrim"
+            },
+            {
+              "id": "door_knob",
+              "kind": "sphere",
+              "radius": 0.035,
+              "position": [
+                0.9,
+                1.02,
+                0.05
+              ],
+              "material": "brass"
+            }
+          ]
+        },
+        {
+          "id": "plinth_0",
+          "kind": "box",
+          "size": [
+            6.58,
+            0.26,
+            0.13
+          ],
+          "position": [
+            0,
+            0.13,
+            2.225
+          ],
+          "material": "plinth",
+          "solid": true
+        },
+        {
+          "id": "plinth_1",
+          "kind": "box",
+          "size": [
+            6.58,
+            0.26,
+            0.13
+          ],
+          "position": [
+            0,
+            0.13,
+            -2.225
+          ],
+          "material": "plinth",
+          "solid": true
+        },
+        {
+          "id": "plinth_2",
+          "kind": "box",
+          "size": [
+            0.13,
+            0.26,
+            4.32
+          ],
+          "position": [
+            -3.225,
+            0.13,
+            0
+          ],
+          "material": "plinth",
+          "solid": true
+        },
+        {
+          "id": "plinth_3",
+          "kind": "box",
+          "size": [
+            0.13,
+            0.26,
+            4.32
+          ],
+          "position": [
+            3.225,
+            0.13,
+            0
+          ],
+          "material": "plinth",
+          "solid": true
         }
       ]
     },
@@ -1456,26 +1650,26 @@
       "id": "tree_1",
       "kind": "group",
       "position": [
-        -7.8,
+        -9.6,
         0,
-        2.4
+        -3.0
       ],
-      "scale": 1.0,
+      "scale": 1.05,
       "rotation": [
         0,
-        12,
+        18,
         0
       ],
       "children": [
         {
           "id": "trunk_1",
           "kind": "cylinder",
-          "radiusTop": 0.14,
-          "radiusBottom": 0.26,
-          "height": 2.4,
+          "radiusTop": 0.12,
+          "radiusBottom": 0.24,
+          "height": 2.9,
           "position": [
             0,
-            1.2,
+            1.45,
             0
           ],
           "material": "bark",
@@ -1484,48 +1678,56 @@
         {
           "id": "crown_1a",
           "kind": "cone",
-          "radius": 1.62,
-          "height": 2.1,
+          "radius": 1.29,
+          "height": 2.3,
           "position": [
-            0,
-            2.65,
-            0
+            -0.05,
+            2.9,
+            0.04
           ],
           "rotation": [
-            2,
+            3.5,
             0,
-            -3
+            -2.1
           ],
-          "material": "leaf"
+          "material": "leaf",
+          "segments": 9
         },
         {
           "id": "crown_1b",
           "kind": "cone",
-          "radius": 1.24,
-          "height": 1.9,
+          "radius": 0.9803999999999999,
+          "height": 2.05,
           "position": [
-            0.07,
-            3.6,
-            0.05
+            0.05,
+            3.85,
+            0.04
           ],
           "rotation": [
-            -3,
+            -4,
             0,
-            2
+            2.4
           ],
-          "material": "leaf2"
+          "material": "leaf2",
+          "segments": 9
         },
         {
           "id": "crown_1c",
           "kind": "cone",
-          "radius": 0.78,
-          "height": 1.5,
+          "radius": 0.602,
+          "height": 1.7,
           "position": [
             -0.05,
-            4.5,
-            0.02
+            4.75,
+            0.04
           ],
-          "material": "leaf3"
+          "material": "leaf3",
+          "rotation": [
+            2,
+            0,
+            -1.2
+          ],
+          "segments": 9
         }
       ]
     },
@@ -1533,26 +1735,26 @@
       "id": "tree_2",
       "kind": "group",
       "position": [
-        7.9,
+        10.4,
         0,
-        -0.6
+        -2.2
       ],
-      "scale": 1.22,
+      "scale": 1.25,
       "rotation": [
         0,
-        -40,
+        -52,
         0
       ],
       "children": [
         {
           "id": "trunk_2",
           "kind": "cylinder",
-          "radiusTop": 0.14,
-          "radiusBottom": 0.26,
-          "height": 2.4,
+          "radiusTop": 0.12,
+          "radiusBottom": 0.24,
+          "height": 2.9,
           "position": [
             0,
-            1.2,
+            1.45,
             0
           ],
           "material": "bark",
@@ -1561,48 +1763,56 @@
         {
           "id": "crown_2a",
           "kind": "cone",
-          "radius": 1.62,
-          "height": 2.1,
+          "radius": 1.5750000000000002,
+          "height": 2.3,
           "position": [
-            0,
-            2.65,
-            0
+            -0.05,
+            2.9,
+            0.04
           ],
           "rotation": [
-            2,
+            3.5,
             0,
-            -3
+            -2.1
           ],
-          "material": "leaf"
+          "material": "leaf",
+          "segments": 9
         },
         {
           "id": "crown_2b",
           "kind": "cone",
-          "radius": 1.24,
-          "height": 1.9,
+          "radius": 1.1969999999999998,
+          "height": 2.05,
           "position": [
-            0.07,
-            3.6,
-            0.05
+            0.05,
+            3.85,
+            0.04
           ],
           "rotation": [
-            -3,
+            -4,
             0,
-            2
+            2.4
           ],
-          "material": "leaf2"
+          "material": "leaf2",
+          "segments": 9
         },
         {
           "id": "crown_2c",
           "kind": "cone",
-          "radius": 0.78,
-          "height": 1.5,
+          "radius": 0.735,
+          "height": 1.7,
           "position": [
             -0.05,
-            4.5,
-            0.02
+            4.75,
+            0.04
           ],
-          "material": "leaf3"
+          "material": "leaf3",
+          "rotation": [
+            2,
+            0,
+            -1.2
+          ],
+          "segments": 9
         }
       ]
     },
@@ -1610,26 +1820,26 @@
       "id": "tree_3",
       "kind": "group",
       "position": [
-        -6.2,
+        -8.4,
         0,
-        -5.4
+        8.2
       ],
       "scale": 0.82,
       "rotation": [
         0,
-        70,
+        74,
         0
       ],
       "children": [
         {
           "id": "trunk_3",
           "kind": "cylinder",
-          "radiusTop": 0.14,
-          "radiusBottom": 0.26,
-          "height": 2.4,
+          "radiusTop": 0.12,
+          "radiusBottom": 0.24,
+          "height": 2.9,
           "position": [
             0,
-            1.2,
+            1.45,
             0
           ],
           "material": "bark",
@@ -1638,48 +1848,56 @@
         {
           "id": "crown_3a",
           "kind": "cone",
-          "radius": 1.62,
-          "height": 2.1,
+          "radius": 1.08,
+          "height": 2.3,
           "position": [
-            0,
-            2.65,
-            0
+            -0.05,
+            2.9,
+            0.04
           ],
           "rotation": [
-            2,
+            3.5,
             0,
-            -3
+            -2.1
           ],
-          "material": "leaf"
+          "material": "leaf",
+          "segments": 9
         },
         {
           "id": "crown_3b",
           "kind": "cone",
-          "radius": 1.24,
-          "height": 1.9,
+          "radius": 0.8207999999999999,
+          "height": 2.05,
           "position": [
-            0.07,
-            3.6,
-            0.05
+            0.05,
+            3.85,
+            0.04
           ],
           "rotation": [
-            -3,
+            -4,
             0,
-            2
+            2.4
           ],
-          "material": "leaf2"
+          "material": "leaf2",
+          "segments": 9
         },
         {
           "id": "crown_3c",
           "kind": "cone",
-          "radius": 0.78,
-          "height": 1.5,
+          "radius": 0.504,
+          "height": 1.7,
           "position": [
             -0.05,
-            4.5,
-            0.02
+            4.75,
+            0.04
           ],
-          "material": "leaf3"
+          "material": "leaf3",
+          "rotation": [
+            2,
+            0,
+            -1.2
+          ],
+          "segments": 9
         }
       ]
     },
@@ -1687,26 +1905,26 @@
       "id": "tree_4",
       "kind": "group",
       "position": [
-        6.4,
+        9.6,
         0,
-        5.6
+        9.4
       ],
-      "scale": 0.94,
+      "scale": 0.95,
       "rotation": [
         0,
-        150,
+        152,
         0
       ],
       "children": [
         {
           "id": "trunk_4",
           "kind": "cylinder",
-          "radiusTop": 0.14,
-          "radiusBottom": 0.26,
-          "height": 2.4,
+          "radiusTop": 0.12,
+          "radiusBottom": 0.24,
+          "height": 2.9,
           "position": [
             0,
-            1.2,
+            1.45,
             0
           ],
           "material": "bark",
@@ -1715,48 +1933,56 @@
         {
           "id": "crown_4a",
           "kind": "cone",
-          "radius": 1.62,
-          "height": 2.1,
+          "radius": 1.35,
+          "height": 2.3,
           "position": [
-            0,
-            2.65,
-            0
+            -0.05,
+            2.9,
+            0.04
           ],
           "rotation": [
-            2,
+            3.5,
             0,
-            -3
+            -2.1
           ],
-          "material": "leaf"
+          "material": "leaf",
+          "segments": 9
         },
         {
           "id": "crown_4b",
           "kind": "cone",
-          "radius": 1.24,
-          "height": 1.9,
+          "radius": 1.026,
+          "height": 2.05,
           "position": [
-            0.07,
-            3.6,
-            0.05
+            0.05,
+            3.85,
+            0.04
           ],
           "rotation": [
-            -3,
+            -4,
             0,
-            2
+            2.4
           ],
-          "material": "leaf2"
+          "material": "leaf2",
+          "segments": 9
         },
         {
           "id": "crown_4c",
           "kind": "cone",
-          "radius": 0.78,
-          "height": 1.5,
+          "radius": 0.63,
+          "height": 1.7,
           "position": [
             -0.05,
-            4.5,
-            0.02
+            4.75,
+            0.04
           ],
-          "material": "leaf3"
+          "material": "leaf3",
+          "rotation": [
+            2,
+            0,
+            -1.2
+          ],
+          "segments": 9
         }
       ]
     },

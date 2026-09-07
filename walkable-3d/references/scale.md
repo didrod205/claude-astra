@@ -119,6 +119,30 @@ light, colour and geometry.
 6. **A tight palette.** Two warm neutrals, one or two woods, one cool, one
    accent. Twenty muddy browns is not a palette, it is an absence of one.
 
+## And outside
+
+The same idea, different parts. An elevation is a blank plane with holes in it
+until you give it these:
+
+1. **A plinth.** A course around the base, standing 10-15 cm proud. A wall that
+   meets grass on a bare line looks pasted onto the ground. Build it as a
+   perimeter, not a slab — as a slab it reaches in under the floor, and the
+   audit will find it inside your furniture.
+2. **Corner boards.** A thin vertical at each corner. It is the only thing
+   breaking a long blank facade into planes.
+3. **A door leaf, ajar.** An opening with nothing in it is a hole. A leaf at
+   20-30° costs three objects and is what makes the front read as an entrance —
+   and it lets the lit interior show, which is worth more than any exterior
+   detail.
+4. **Trees that frame rather than block.** Push them to the sides and back. Four
+   large cones directly in front of the subject is the most common way a good
+   building is photographed badly. Vary height, girth, tilt and facet count.
+5. **Leave the ground alone.** A hard-edged rectangle of "gravel" or a lighter
+   patch of "meadow" lying on a flat plane reads as a rendering bug, not as
+   landscaping. Flat grass with one path is better than flat grass with
+   rectangles on it. Ground variation needs real terrain, and that is a
+   different job.
+
 ## Making it not look generated
 
 - **Vary.** Same prop three times at the same scale and yaw is the tell. Change
