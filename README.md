@@ -105,10 +105,11 @@ dead input — not that a game is fun.
 
 `desktop-app-driver` is absent from `verify.sh` and always will be: it drives the
 user's own machine through a permission dialog, so there is nothing to automate.
-It was instead **driven by hand** against Calculator and TextEdit — computing
-12 × 7, switching modes through the menu bar, typing into a document, and
-deliberately provoking the failure paths. That session corrected six things in
-the skill, three of them claims that were simply wrong:
+It is instead **driven by hand**, and every claim it makes has been checked
+against a real app. Calculator and TextEdit came first — computing 12 × 7,
+switching modes through the menu bar, typing into a document, provoking the
+failure paths on purpose. That session corrected six things, three of them
+claims that were simply wrong:
 
 - `element_index` was described as surviving re-layout. It does not — the
   numbering is rebuilt on every screenshot, and one batch shifted every index.
@@ -118,7 +119,12 @@ the skill, three of them claims that were simply wrong:
   *listed and disabled* right after a background write, because the write never
   reached the app's undo stack.
 
-The two apps are now written up as verified profiles in
+Activity Monitor and Preview came later, to test what the skill said about
+table-shaped and canvas-shaped apps. Both hypotheses needed correcting: a table
+app can keep its entire contents out of the accessibility tree, and a canvas
+click does not reliably return `unsupported` — Preview's returned a fourth
+result kind, "delivered but unverifiable", that the docs did not mention at all.
+All four are written up as measured profiles in
 [`references/app-profiles.md`](desktop-app-driver/references/app-profiles.md).
 
 Dogfooding the three generation loops — authoring a two-storey townhouse from a
@@ -363,12 +369,21 @@ app_batch([ click 모두 지우기, 1, 2, 곱하기, 7, 등호, screenshot ])
 app_menu({ path: ["보기", "공학용"] })                     → switched mode
 ```
 
-Two things it will not let you skip: a plain `ok` means the action was
-*dispatched*, not that it worked — so every batch ends in a screenshot — and a
-background write often never reaches the app's undo stack, so `overwrite_existing`
-returning the old value is your only undo. Both are written up, with the
-Calculator and TextEdit sessions, in
+Results come in four kinds and only one is even a claim about the app —
+`ok (AXPress on ...)` ran a real accessibility action; `ok (delivered via raw
+input ... unverified)` is the tool telling you it could not confirm the click;
+`ineffective` and `unsupported(canvas)` speak for themselves. So every batch ends
+in a screenshot. And a background write often never reaches the app's undo stack,
+so `overwrite_existing` returning the old value is your only undo.
+
+Four apps are written up as measured profiles rather than guesses — Calculator,
+TextEdit, Activity Monitor and Preview — in
 [`references/app-profiles.md`](desktop-app-driver/references/app-profiles.md).
+The most useful thing they establish: **a whole class of app keeps none of its
+content in the accessibility tree.** Activity Monitor's process table is absent
+from it entirely, 35 elements and every one of them toolbar chrome. You read that
+content off the screenshot and drive the app through the controls that *are*
+exposed — typing into its search field filtered a table the tree never described.
 
 ## Try it without asking Claude
 

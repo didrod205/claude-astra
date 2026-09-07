@@ -74,6 +74,11 @@ click-only** (no typing — use the Bash tool for shell work). The tier is in th
 
 ## The loop
 
+**The first screenshot after a launch can be unpainted.** A freshly launched
+window came back with its entire table drawn as blank grey bars; one click and a
+second screenshot showed the real contents. Do not read an empty-looking window
+as an empty window.
+
 ```
 app_list_windows        → which window (note the id)
 app_screenshot          → the image AND the AX summary with [N] indices
@@ -82,10 +87,20 @@ app_menu | app_click(element_index:) | app_click(coordinate:) | app_type
 app_screenshot          → did it actually land?
 ```
 
-**Never chain blind.** An action that returns `ineffective` means the write was
-accepted and the app has not visibly responded — it is not a success, and inside
-`app_batch` it does **not** stop the run. Every batch ends with a screenshot,
-and you look at it before deciding the step worked.
+**Never chain blind.** Results come in four kinds and only one of them is
+evidence:
+
+| | means |
+|---|---|
+| `ok (AXPress on ...)` | a real accessibility action ran. The best you get |
+| `ok (delivered via raw input ... unverified)` | the point hit something, the element exposed no action, the click was synthesised — **the tool is telling you it cannot confirm it** |
+| `ineffective` | the write was accepted, the app has not responded |
+| `unsupported(canvas)` | nothing hit-testable there at all |
+
+Only the first is even a claim about the app, and it is not a promise: `ok
+(AXPress on AXButton '모드')` came back from a press that changed nothing.
+`ineffective` does **not** stop an `app_batch`. So every batch ends with a
+screenshot, and you look at it before deciding the step worked.
 
 ## Target by name, not by pixel
 

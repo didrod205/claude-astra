@@ -7,10 +7,11 @@ after two identical failures the cause is structural.
 
 | result | means | do |
 |---|---|---|
+| `ok (AXPress on ...)` | a real accessibility action was performed on a real element. The strongest result there is — and still not proof the app *did* anything: `ok (AXPress on AXButton '모드')` came back from a press that changed nothing |
+| `ok (delivered via raw input ... unverified)` | the coordinate hit something, but the element exposed no accessibility action, so the click was synthesised and **the tool is telling you it cannot confirm it**. Screenshot, always |
 | `ineffective` | the write was accepted, the app hasn't visibly responded | screenshot. It may have worked. If not, the target was wrong |
-| plain `ok` | the action was **dispatched**, not that it worked | still screenshot. `ok (AXPress on AXButton '모드')` came back from a press that changed nothing at all |
+| `unsupported(canvas)` | nothing hit-testable at that coordinate at all | `element_index`, then `target: "focused"` |
 | `disabled` on a menu item | the item exists but is greyed out — usually the app is not frontmost or has no key window | fix the precondition; do not retry |
-| `unsupported(canvas)` | nothing hit-testable at that coordinate | retry with `element_index`, then `target: "focused"` |
 | refused (menu control) | you clicked a dropdown / gear / right-click | use `app_menu` |
 | a tier error | the app is granted read-only or click-only | browsers → browser tools; terminals and IDEs → Bash |
 | not granted | app missing from the session grant | `request_access` again with it added |

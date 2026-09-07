@@ -49,8 +49,12 @@ points marked.
 
 Not a substitute for a profile — a starting hypothesis for what to check first.
 
-**Spreadsheets (Numbers, Excel).** Cells are usually addressable through AX rows
-and cells, but the grid may behave as a canvas. Fastest reliable path is often to
+**Table and grid apps (spreadsheets, monitors, database clients).** Do not assume
+the grid is in the tree. Activity Monitor's process table is absent from it
+entirely — see the profile below — and where that is true for a spreadsheet the
+whole plan changes: you read values off the screenshot and drive the app through
+its search, sort and menu commands rather than by cell.
+Where cells *are* exposed, Fastest reliable path is often to
 click one cell, then drive with `app_key` (`tab`, `return`, arrows) and `app_type`
 with `target: "focused"`. Turn `disable_substitutions` on — autocorrect mangles
 formulas. Formulas commit on Return, not on typing; screenshot after committing,
@@ -64,6 +68,11 @@ lean on modal dialogs with many fields — an `app_batch` per dialog, ending in 
 screenshot, is the efficient unit. Check whether the operation you want has a
 scripting or CLI equivalent before clicking anything; many do, and it will be
 faster and repeatable.
+
+**Read-only inspectors (Activity Monitor, Console, Disk Utility).** Toolbar-rich
+and content-poor in AX. Safe to explore — nothing to save, nothing to undo — and
+worth a few minutes early in a session with an unfamiliar app family, because
+what you learn about how the tree is shaped transfers.
 
 **Creative tools (Photoshop, Figma desktop, video editors).** Panels are AX-rich,
 the document is canvas. Tool selection is usually a single key. Layers and
@@ -185,3 +194,60 @@ inside it — only display-scope control or the user. So: before you open a wind
 or trigger a dialog in an app, know how you will close it, and prefer not
 creating unsaved state at all. Nothing was written to disk here, but the window
 could not be closed without the user.
+
+## 활성 상태 보기 (Activity Monitor) · com.apple.ActivityMonitor · macOS 26 · menus in Korean
+
+Driven in the background; every line observed.
+
+**Access:** bundle id, tier `full`. Read-only in practice — nothing to save.
+
+**Windows:** one, id from `open_application`'s reply.
+
+**Menu bar (verified):** the app menu is `활성 상태 보기`; quit is
+`["활성 상태 보기", "활성 상태 보기 종료"]` and it works from the background even
+though `파일 > 닫기` in other apps does not.
+
+**AX coverage — the reason this profile exists:** **the process table is not in
+the accessibility tree at all.** 35 elements captured, every one of them toolbar
+or window chrome; `app_ax_find({role: "AXRow"})` matches nothing. The tabs are
+`AXRadioButton/AXSegment` (`CPU`, `메모리`, `에너지`, `디스크`, `네트워크`), and the
+search box is a real `AXTextField/AXSearchField`.
+
+**What works instead:** read the table off the screenshot, and filter it through
+the search field — typing `Chrome` into it narrowed the list immediately. That
+pattern (content in pixels, control in the tree) is the one to reach for in any
+grid-shaped app.
+
+**Traps:**
+- The **first screenshot after launch showed every row as a blank grey bar.**
+  The window had not painted. One click and a second screenshot showed the real
+  contents. An empty-looking window is not an empty window.
+- Clicking the `메모리` tab returned `ok (delivered via raw input on
+  AXRadioButton ...; the accessibility action (AXPress) was unavailable so this
+  is unverified)` — the tool saying plainly that it could not confirm the press.
+- **Typing into the search box reflowed the toolbar**: the field grew 180 → 242
+  px, every tab shifted left by ~100 px, and an overflow `AXPopUpButton` appeared.
+  Indices and coordinates captured before it were all stale.
+
+## 미리보기 (Preview) · com.apple.Preview · macOS 26 · menus in Korean
+
+**Access:** bundle id, tier `full`. Open a document with `open -a Preview <file>`
+from the shell rather than fighting a file dialog in the background.
+
+**AX coverage:** 26 elements, all toolbar — zoom `AXButton/AXSegment`s, markup
+and inspector `AXCheckBox`es, a search field. **The page content is not in the
+tree**, but unlike Activity Monitor it renders correctly in the very first
+screenshot.
+
+**Canvas behaviour, and a correction:** a coordinate click in the middle of the
+page did **not** return `unsupported(canvas)`. It hit an `AXPage` and came back
+`ok (delivered via raw input ...; the accessibility action ((none)) was
+unavailable so this is unverified)`. A canvas can be opaque or merely
+unverifiable; assume neither without looking.
+
+**Menu bar (verified):** `보기` carries the zoom commands — `확대`, `축소`,
+`실제 크기`, `선택 범위 확대`, `연속 스크롤`, `단일 페이지`, `두 페이지` — which is
+the documented way to drive a canvas app that will not confirm a click.
+
+**Undo path:** none needed for viewing. Quit is
+`["미리보기", "미리보기 종료"]` and works from the background.

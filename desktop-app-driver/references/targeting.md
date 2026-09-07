@@ -63,10 +63,35 @@ the button press had silently failed. When there genuinely is no menu equivalent
 (a custom in-window picker), that is one of the few legitimate reasons to
 escalate to display-scope tools.
 
+## When the content is not in the tree at all
+
+The AX summary is a map of the *controls*, and for a whole class of app it
+contains none of the content. Activity Monitor's process table — the entire
+point of the application — is absent: 35 elements captured, every one of them
+toolbar or window chrome, and `app_ax_find({role: "AXRow"})` matches nothing.
+Preview's PDF page is the same: 26 elements, all toolbar.
+
+That is not a failure to recover from, it is the shape of the app. Two moves:
+
+1. **Read the pixels.** The content is in the screenshot even when it is not in
+   the tree. For a table, that is often enough — you can read values, you just
+   cannot click a row by name.
+2. **Drive it through the controls that *are* exposed.** Activity Monitor's
+   search field is a real `AXTextField`: typing `Chrome` into it filtered a table
+   the tree never described. Sorting, filtering, tabs, and menu commands reach
+   content that indices cannot.
+
+Check for this early — one `app_ax_find` with a broad role tells you which kind
+of app you are in, and it changes the whole plan.
+
 ## `unsupported(canvas)`
 
-A coordinate click on a region the app draws itself — a KiCad board, a Photoshop
-document, a Keynote slide — has nothing to hit-test against. Two fallbacks:
+A coordinate click on a region the app draws itself has nothing to hit-test
+against — *sometimes*. It is not the universal canvas outcome: clicking the
+middle of a PDF page in Preview hit an `AXPage` and returned
+`ok (delivered via raw input ... unverified)` instead. A canvas may be opaque
+(`unsupported`) or merely unverifiable; both mean screenshot before believing
+anything, and only the first needs a fallback. Two fallbacks:
 
 - `element_index` from the AX summary, if the app exposes anything there.
 - `target: "focused"` dispatches to the app's own focused element. This is the
