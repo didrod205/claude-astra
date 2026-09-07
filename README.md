@@ -45,6 +45,58 @@ And "make it match our template" is guessing until you read the template — so
 `house-style` unzips it, takes the theme fonts, the palette, the size ladder and
 the layout names, and diffs the finished file back against them.
 
+## Verified
+
+`./verify.sh` reproduces every claim below. 14 checks, no arguments, no setup —
+it builds its own fixtures in a temp directory and cleans up after itself.
+
+```
+walkable-3d
+  ok    audit passes on the bundled scene
+  ok    audit fails a scene with the player trapped in geometry
+  ok    shot.mjs renders a frame headlessly
+  ok    glTF export keeps object names and parenting
+playable-prototype
+  ok    the bundled game passes the playtest
+  ok    playtest rejects a prototype with no API and one that is non-deterministic
+frontend-qa
+  ok    sweep passes a clean page
+  ok    sweep catches console errors, overflow, broken images and duplicate ids
+house-style
+  ok    pdf: the reference matches its own spec
+  ok    pdf: a drifted file is caught on face, colour and size
+  ok    docx: a real Word file matches its own spec
+  ok    pptx: a real PowerPoint file matches its own spec
+  ok    docx: off-house face and off-ladder size are caught
+  ok    pptx: off-house face, 16:9 geometry and off-ladder size are caught
+```
+
+Every check is run **both ways** — a good input must pass and a deliberately
+broken one must fail. A checker that only ever sees valid input is not a checker.
+
+The `house-style` Office fixtures are the Word and PowerPoint templates bundled
+with `python-docx` and `python-pptx`, which are genuine Microsoft Office output
+(`Application=Microsoft Macintosh Word 14.0000`), plus generated decks and
+documents carrying charts, tables, notes and page breaks. `style.py` itself is
+run by the system `python3` on the standard library alone, so the no-dependency
+claim is checked at the same time. Those two libraries are only needed to *build*
+the fixtures; without them the four Office checks are skipped with a note, never
+silently passed. Same for PyMuPDF and the two PDF checks.
+
+### What this does not cover
+
+No skill's *judgement* is tested here, only its tooling. `verify.sh` proves the
+audit catches a trapped spawn — not that a scene looks good; proves the sweep
+catches an overflow — not that a page is usable; proves the playtest catches a
+dead input — not that a game is fun. `desktop-app-driver` has no automated checks
+at all: it is method and per-app knowledge, and its correctness is whether
+following it produces working sessions.
+
+The one bug this suite was written after finding: the size-ladder check silently
+skipped `.docx` and `.pptx`, because those formats declare point sizes per run
+rather than in a styles part, so a 19pt heading in a 12pt house passed clean.
+Real-file testing found it; the last two lines above are what now catches it.
+
 ## Install
 
 Copy a skill directory into `~/.claude/skills/`:
@@ -56,26 +108,44 @@ cp -r claude-astra/walkable-3d ~/.claude/skills/
 
 Or point Claude Code at the checkout and invoke a skill by name.
 
-## Try walkable-3d in one command
+## Try it
+
+```bash
+./verify.sh          # all 14 checks, ~2 minutes
+```
+
+Walk the bundled 3D scene — click the page, then WASD; `G` exports a `.glb`:
 
 ```bash
 node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
 ```
 
-Click the page, then WASD. `G` exports a `.glb`.
+Audit it and photograph it from six angles:
 
 ```bash
 node walkable-3d/scripts/audit.mjs walkable-3d/assets/template
 node walkable-3d/scripts/shot.mjs  walkable-3d/assets/template --out shots
 ```
 
-## Try playable-prototype in one command
+Play the reference game prototype, or let a bot play it for you:
 
 ```bash
+open playable-prototype/assets/template/game.html
 node playable-prototype/scripts/playtest.mjs playable-prototype/assets/template/game.html --out shots
 ```
 
-Or just open `playable-prototype/assets/template/game.html` and play it.
+Read a house style out of a document and check another against it:
+
+```bash
+python3 house-style/scripts/style.py extract their-deck.pptx -o style.json
+python3 house-style/scripts/style.py check  your-draft.pptx --spec style.json
+```
+
+Sweep a page at three widths:
+
+```bash
+node frontend-qa/scripts/qa-run.mjs http://localhost:3000 --out qa
+```
 
 ## Requirements
 
