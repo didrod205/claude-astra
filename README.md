@@ -10,70 +10,78 @@ for the detail, and `scripts/` where the work is deterministic enough to
 automate. Those scripts are dependency-free — Node driving headless Chrome over
 the DevTools protocol, or Python standard library. Nothing to install.
 
-| skill | does |
-|---|---|
-| [`walkable-3d`](walkable-3d) | prompt / photo / sketch → a walkable Three.js scene, structurally audited, exported to `.glb` with every object still named and separable for Blender or Unreal |
-| [`desktop-app-driver`](desktop-app-driver) | operate native Mac apps through the accessibility tree — in the background, while the user keeps working |
-| [`playable-prototype`](playable-prototype) | one brief → several genuinely different browser game prototypes, each proven playable by a bot that presses the buttons |
-| [`frontend-qa`](frontend-qa) | verify a page at three widths and drive its real flows, then report what's broken with evidence |
-| [`house-style`](house-style) | pull the house style out of the user's own documents, then check new ones actually match it |
-
 <p align="center">
   <img src="media/townhouse-plan.png" width="820" alt="Cutaway plan of a generated two-storey townhouse: stairs, furniture, doorway and stairwell opening visible from above">
   <br><em>A scene <code>walkable-3d</code> built from one sentence, cut through at 2.6&nbsp;m — the only view that shows an interior, and the one the default six angles could not.</em>
 </p>
 
+| skill | does |
+|---|---|
+| [`walkable-3d`](walkable-3d) | prompt / photo / sketch → a walkable Three.js scene, structurally audited, exported to `.glb` with every object still named and separable for Blender or Unreal |
+| [`playable-prototype`](playable-prototype) | one brief → several genuinely different browser game prototypes, each proven playable — and measured for whether the inputs carry a decision at all |
+| [`frontend-qa`](frontend-qa) | verify a page at three widths and drive its real flows, then report what's broken with evidence |
+| [`house-style`](house-style) | pull the house style out of the user's own documents — the palette *and* the writing — then check new ones actually match |
+| [`desktop-app-driver`](desktop-app-driver) | operate native Mac apps through the accessibility tree — in the background, while the user keeps working |
+
 ## The thing they have in common
 
 Each one is built around a verification loop, because in all five domains the
-work *looks* finished long before it *is* finished.
+work *looks* finished long before it *is* finished. What each loop had to learn
+to see:
 
-A generated 3D scene renders something, and that something is usually floating,
-hollow, or wrong-scaled in ways one screenshot hides — so `walkable-3d` ships an
-audit that fails the build when the player would spawn inside a wall, and a
-screenshot tool that takes six angles because five of them are the ones you
-didn't think to check.
+**A generated 3D scene renders something**, and that something is usually
+floating, hollow, or wrong-scaled in ways one screenshot hides. `walkable-3d`
+audits the structure — it fails a build where the player would spawn inside a
+wall, or where the ground would not hold them up — photographs six angles
+because five of them are the ones you didn't think to check, and cuts a plan
+through the roof, because a roofed building is opaque from all six.
 
-A click that silently no-ops produces the same screenshot as one that worked — so
-`frontend-qa` asserts on the DOM, the console, and the network, never on vibes.
+**A click that silently no-ops produces the same screenshot as one that worked**,
+so `frontend-qa` asserts on the DOM, the console and the network, never on
+vibes — and computes the two failures people assume a tool cannot see, colour
+contrast and focus visibility.
 
-A desktop action can report success and do nothing — so `desktop-app-driver`
-ends every batch with a screenshot and treats `ineffective` as unproven.
+**A desktop action can report success and do nothing.** `desktop-app-driver`
+treats four different result kinds as four different amounts of evidence, and
+only one of them is a claim about the app at all.
 
-A game that renders is not a game that plays — one of the four buttons does
+**A game that renders is not a game that plays** — one of the four buttons does
 nothing, or the score can never go up, and no screenshot shows it. So every
 prototype `playable-prototype` produces exposes a small machine API, and a bot
-plays it: holds each input and checks the world responded, runs the same seed
-twice and checks it agrees, plays at random and checks it can score.
+plays it. Because the game is also deterministic and seeded, the bot can go
+further and ask *what if I had pressed something else* — which measures whether
+there is a decision in the game or only a seed.
 
-And "make it match our template" is guessing until you read the template — so
-`house-style` unzips it, takes the theme fonts, the palette, the size ladder and
-the layout names, and diffs the finished file back against them.
+**And "make it match our template" is guessing until you read the template** —
+so `house-style` unzips it and takes the theme fonts, the palette, the size
+ladder, the layout names, and the writing: words per slide, sentence length,
+whether bullets end in a full stop, how long a heading runs.
 
 ## Verified
 
-`./verify.sh` reproduces every claim below. 18 checks, no arguments, no setup —
+`./verify.sh` reproduces every claim below. 23 checks, no arguments, no setup —
 it builds its own fixtures in a temp directory and cleans up after itself.
 
 ```
 walkable-3d
   ok    audit passes on the bundled scene
   ok    audit fails a scene with the player trapped in geometry
-  ok    audit fails a scene that does not hold the player up
   ok    shot.mjs renders a frame headlessly
+  ok    audit fails a scene that does not hold the player up
   ok    --plan cuts through the roof for an interior view
   ok    glTF export keeps object names and parenting
 playable-prototype
   ok    the bundled game passes the playtest
   ok    playtest rejects a prototype with no API and one that is non-deterministic
   ok    playtest accepts a turn-based prototype that idles without advancing
+  ok    playtest flags a prototype whose inputs carry no decision
 frontend-qa
   ok    sweep passes a clean page
   ok    sweep catches console errors, overflow, broken images and duplicate ids
   ok    sweep flags a page with no viewport meta
   ok    sweep computes colour contrast and flags text below AA
   ok    sweep flags a control with no focus style, and not one that has one
-house-style
+house-style (style.py runs on the standard library alone)
   ok    pdf: the reference matches its own spec
   ok    pdf: a drifted file is caught on face, colour and size
   ok    docx: a real Word file matches its own spec
@@ -85,7 +93,10 @@ house-style
 ```
 
 Every check is run **both ways** — a good input must pass and a deliberately
-broken one must fail. A checker that only ever sees valid input is not a checker.
+broken one must fail. A checker that only ever sees valid input is not a checker,
+so each fixture comes in a matched pair: a scene that holds the player up and one
+that does not, a deck in the house voice and the same three slides rewritten
+wordy and first-person, a button with a focus ring and one with `outline: none`.
 
 The `house-style` Office fixtures are the Word and PowerPoint templates bundled
 with `python-docx` and `python-pptx`, which are genuine Microsoft Office output
@@ -93,10 +104,10 @@ with `python-docx` and `python-pptx`, which are genuine Microsoft Office output
 documents carrying charts, tables, notes and page breaks. `style.py` itself is
 run by the system `python3` on the standard library alone, so the no-dependency
 claim is checked at the same time. Those two libraries are only needed to *build*
-the fixtures; without them the four Office checks are skipped with a note, never
+the fixtures; without them the Office checks are skipped with a note, never
 silently passed. Same for PyMuPDF and the two PDF checks.
 
-### What this does not cover
+### What the checks do not cover
 
 No skill's *judgement* is tested here, only its tooling. `verify.sh` proves the
 audit catches a trapped spawn — not that a scene looks good; proves the sweep
@@ -106,67 +117,52 @@ dead input — not that a game is fun.
 `desktop-app-driver` is absent from `verify.sh` and always will be: it drives the
 user's own machine through a permission dialog, so there is nothing to automate.
 It is instead **driven by hand**, and every claim it makes has been checked
-against a real app. Calculator and TextEdit came first — computing 12 × 7,
-switching modes through the menu bar, typing into a document, provoking the
-failure paths on purpose. That session corrected six things, three of them
-claims that were simply wrong:
-
-- `element_index` was described as surviving re-layout. It does not — the
-  numbering is rebuilt on every screenshot, and one batch shifted every index.
-- Menu-presenting controls were described as refused. An `AXPopUpButton` is; a
-  plain `AXButton` that opens a menu returns `ok` and silently does nothing.
-- "Know the undo path first" was described as reading the Edit menu. Undo was
-  *listed and disabled* right after a background write, because the write never
-  reached the app's undo stack.
-
-Activity Monitor and Preview came later, to test what the skill said about
-table-shaped and canvas-shaped apps. Both hypotheses needed correcting: a table
-app can keep its entire contents out of the accessibility tree, and a canvas
-click does not reliably return `unsupported` — Preview's returned a fourth
-result kind, "delivered but unverifiable", that the docs did not mention at all.
-All four are written up as measured profiles in
+against a real app. Four are written up as measured profiles — Calculator,
+TextEdit, Activity Monitor and Preview — in
 [`references/app-profiles.md`](desktop-app-driver/references/app-profiles.md).
 
-Dogfooding the three generation loops — authoring a two-storey townhouse from a
-brief, spinning three lighthouse prototypes out of one idea, and sweeping them —
-found four more defects, each now pinned by a check above:
+## What running them found
 
-- The six default 3D shots **cannot see inside a roofed building**, and the docs
-  called the top-down "the highest-value image" while it showed a roof. `--plan`
-  cuts through at a given height; one cut revealed the stairs, the stairwell
-  opening and the furniture that four brick elevations had hidden.
-- The playtest failed a **turn-based** prototype for "tick never advanced" —
-  contradicting the turn-based pattern its own reference documents. Determinism
-  and the bot run now decide that verdict, not the idle run.
-- A page with **no `<meta name="viewport">`** was swept clean at 390px. A phone
-  lays such a page out at ~980px and scales it down, so nothing overflowed —
-  the missing tag was masking every responsive finding. Adding the check turned
-  one silent pass into a correct "overflows by 35px".
-- Passing a directory with no `index.html` produced a confusing 404 report
-  instead of saying so.
+Every skill here was used, not just written, and each one turned out to be wrong
+about something. These are the corrections worth knowing even if you never touch
+the repo.
 
-Driving the flows half against a live prototype — the click-through session the
-sweep cannot do — found two more, both of the kind that make a QA report *wrong*
-rather than incomplete:
+**A tool that reports success is not reporting evidence.** A desktop click that
+returns `ok (AXPress on AXButton '모드')` can change nothing at all; one that
+returns `ok (delivered via raw input … unverified)` is the tool saying outright
+that it could not confirm anything. Activity Monitor keeps its entire process
+table *out* of the accessibility tree — 35 elements, every one of them toolbar
+chrome — so you read that content off the screenshot and drive the app through
+the controls that are exposed.
 
-- **`requestAnimationFrame` never fires while the browser pane is hidden**, and
-  fronting the tab does not help because it is the pane that is hidden. Driving a
-  real 1.5 seconds left the game's `tick` at 0 and its DOM counters at their
-  initial values while the internal state had already changed. A tester reading
-  only the DOM would have filed "the counter never updates" against working code.
-- **Synthetic key events arrive without `e.code`** — `ArrowRight` came through on
-  `e.key` alone, and `space` with both fields empty — so any handler written as
-  `KEYS[e.code]`, the common form, silently never fires while the tool still
-  reports the key as pressed.
+**Verify in the environment you are verifying, not the one you assume.** A
+headless page throttles `requestAnimationFrame` to a stop, so a wall-clock check
+of a walk simulation under-reports a fall and a DOM read of a canvas game reports
+frozen counters against working code. A headless page is also never
+window-focused, so `:focus` never matches and a focus-visibility check is
+confidently wrong on every page it sees unless you turn focus emulation on.
+Synthetic key events arrive without `e.code`, so a handler written the common way
+silently never fires while the tool still reports the key as pressed.
 
-Both are now in `frontend-qa/references/flows.md`, with what to assert instead.
-The second was also a real portability bug in this repo's own game template,
-which read `e.code` only; it now binds on both.
+**Order matters more than coverage.** A page with no `<meta name="viewport">` is
+laid out at ~980px on a phone: nothing overflows, and every width-based finding
+in the report was measured in a viewport that is not on screen. A prototype whose
+runs are non-deterministic cannot be asked whether an input did anything. In both
+cases one unchecked precondition was quietly invalidating everything downstream.
 
-The one bug the suite was originally written after finding: the size-ladder check silently
-skipped `.docx` and `.pptx`, because those formats declare point sizes per run
-rather than in a styles part, so a 19pt heading in a 12pt house passed clean.
-Real-file testing found it; the last two lines above are what now catches it.
+**The bug the screenshots were hiding.** `walkable-3d`'s frame loop computed
+`dt` from a `requestAnimationFrame` timestamp that can precede the
+`performance.now()` it was seeded with. The first `dt` was negative, gravity
+added *upward* velocity, and the player was flung out of the world before the
+first frame drew — so every screenshot for weeks was taken from underground with
+the scene frustum-culled to almost nothing, and an earlier "freeze the sim for
+capture" change had hidden it rather than fixed it.
+
+**Measuring the thing people call unmeasurable.** Density, sentence length and
+title style were documented as needing a human to read the samples. `"Q3 Revenue"`
+against `"We are delighted to report that third quarter revenue grew
+substantially"` is not a matter of taste a tool must stay out of — it is 1 word
+against 11.
 
 ## Install
 
@@ -203,7 +199,7 @@ node walkable-3d/scripts/export-glb.mjs scene/ --out house.glb
 
 ```
 audit - townhouse
-  67 objects (25 solid) - 60.0 x 7.8 x 60.0 m - 57 draw calls - 2k tris
+  67 objects (25 solid) - 60.0 x 7.8 x 60.0 m - 58 draw calls - 8k tris
 
   ok - no structural problems
 ```
@@ -388,7 +384,7 @@ exposed — typing into its search field filtered a table the tree never describ
 ## Try it without asking Claude
 
 ```bash
-./verify.sh                                                   # all 18 checks, ~4 min
+./verify.sh                                                   # all 23 checks, ~4 min
 node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
 open playable-prototype/assets/template/game.html
 ```
@@ -402,7 +398,8 @@ open playable-prototype/assets/template/game.html
 
 Node 22+ and a Chrome, Chromium, or Edge install. The scripts find the browser
 themselves; set `CHROME_BIN` to override. `walkable-3d` renders through software
-WebGL by default so it works headless anywhere — set `W3D_GL=angle` to use the
-GPU. `house-style` is Python 3 standard library only, plus PyMuPDF if you want to
+WebGL by default so it works headless anywhere — which is portable and slow:
+**set `W3D_GL=angle` to use the real GPU** for anything you intend to look at,
+and `--scale 1` when you only need to know that a frame rendered. `house-style` is Python 3 standard library only, plus PyMuPDF if you want to
 read PDF samples. `desktop-app-driver` is macOS-only and needs the computer-use
 tools.

@@ -91,6 +91,34 @@ Sketch a metre grid in your head or in a comment block, then place. In practice:
    find what you left no room to walk through — the spawn shot does.
 5. **Then the outside**: ground, path, planting, distant filler.
 
+## What makes a room read as a room
+
+Six things, in the order they pay off. None of them is a texture — a single
+procedural noise map applied to everything reads as burlap on the walls and
+camouflage on the bedding, which is worse than a clean flat surface. Without
+real assets the credible target is **stylised**, and stylised is carried by
+light, colour and geometry.
+
+1. **Skirting.** A 10 cm board where wall meets floor. The junction of two flat
+   planes is a hard line with nothing to catch a shadow, and its absence is the
+   single loudest reason a rendered interior reads as a box.
+2. **Window reveals and a sill that sits proud.** A window is not a hole with a
+   frame: it is a returned face the thickness of the wall, plus a board that
+   projects past it. Six extra objects, and the facade stops being a decal.
+3. **A lit ceiling.** The sun cannot get in, so a ceiling with no light on it
+   goes black and the room reads as a cave. One dim warm light near the ceiling
+   costs one object.
+4. **Warm against cool.** A warm lamp on one side and daylight through a window
+   on the other gives every surface two different colours to be shaded by. A
+   room lit by one source of one colour looks like a render; a room lit by two
+   of different colours looks like a room.
+5. **Layered soft furnishing.** A bed is not three coloured slabs. It is a
+   headboard, a frame, a mattress, a duvet that overhangs the sides, a folded
+   return at the top, and two pillows leaning on something. Six objects instead
+   of three, and it stops being furniture-shaped and starts being furniture.
+6. **A tight palette.** Two warm neutrals, one or two woods, one cool, one
+   accent. Twenty muddy browns is not a palette, it is an absence of one.
+
 ## Making it not look generated
 
 - **Vary.** Same prop three times at the same scale and yaw is the tell. Change

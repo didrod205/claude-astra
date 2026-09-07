@@ -46,7 +46,7 @@ bounding box. Parent/child pairs are exempt.
 ## shot.mjs
 
 ```bash
-node scripts/shot.mjs scene/ --out shots [--w 1280] [--h 800]
+node scripts/shot.mjs scene/ --out shots [--w 1280] [--h 800] [--scale 1|2]
 node scripts/shot.mjs scene/ --pose 3,1.7,2@0,1.6,-4      # a specific viewpoint
 node scripts/shot.mjs scene/ --plan 2.6 --plan 5.4        # cutaway plan per storey
 node scripts/shot.mjs scene/ --only spawn                  # just the arrival shot
@@ -59,6 +59,21 @@ Default set — **read all six**:
 | `spawn` | what the user actually sees first. Scale, framing, whether anything is worth walking to |
 | `orbit-0/90/180/270` | the sides you did not think about. Missing back walls, hollow buildings, props floating beside the model rather than in it |
 | `top` | the footprint and the site. **On a roofed building it shows a roof and nothing else** — use `--plan` for those |
+
+### Rendering cost
+
+Headless renders through **software WebGL** by default, so it works anywhere with
+no GPU assumptions — and it is slow: with ambient occlusion and bloom on a
+120-object scene, one 1280×800 frame at `--scale 2` takes about a minute, and the
+default six take three. Two levers:
+
+- `--scale 1` and a smaller `--w/--h` when you only need to know that something
+  rendered rather than to look at it closely. 640×400 at scale 1 is ~12 s.
+- `W3D_GL=angle` uses the real GPU and is far faster. Use it for the shots you
+  are actually going to look at.
+
+Every DevTools call is bounded at two minutes, so a browser that stops answering
+fails with a message instead of hanging the run.
 
 Framing ignores terrain-sized ground slabs, so a 6 m cabin on a 60 m lawn frames
 on the cabin. Poses are computed from the subject bounds every run, so they stay

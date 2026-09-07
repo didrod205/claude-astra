@@ -64,6 +64,7 @@ carry an inline object instead of a name.
 | `roughness` | 0 mirror … 1 chalk. Most real surfaces are 0.7–1.0 |
 | `metalness` | 0 or 1 in practice; values between are physically meaningless |
 | `opacity` | < 1 turns on transparency (glass: `0.25`, roughness `0.05`) |
+| `detail` | `true` adds a faint procedural roughness break-up. **Off by default**: glTF packs roughness into a per-material image, so one shared noise map came out of the exporter once per material and a small cabin weighed 13.8 MB instead of 0.7. Turn it on only for scenes you will not export |
 | `emissive`, `emissiveIntensity` | self-lit surfaces: lamps, screens, windows at night |
 | `doubleSided` | for single-plane geometry seen from both sides |
 

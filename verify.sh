@@ -61,7 +61,7 @@ JSON
 expect 2 "audit fails a scene that does not hold the player up" -- \
   node walkable-3d/scripts/audit.mjs "$TMP/falling"
 
-node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn --plan 1.5 >/dev/null 2>&1
+node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn --plan 1.5 --scale 1 --w 640 --h 400 >/dev/null 2>&1
 [ -s "$TMP/shots/plan-1_5.png" ] && ok "--plan cuts through the roof for an interior view" || bad "--plan produced no image"
 
 node walkable-3d/scripts/export-glb.mjs walkable-3d/assets/template --out "$TMP/scene.glb" >/dev/null 2>&1

@@ -4,7 +4,7 @@
 //   node scripts/shot.mjs <sceneDir> [--out shots] [--w 1280] [--h 800]
 //                         [--pose x,y,z@lx,ly,lz]...   (repeatable; overrides auto poses)
 //                         [--plan <y>]...              (repeatable; cutaway plan at that height)
-//                         [--only spawn|orbit|top]
+//                         [--only spawn|orbit|top] [--scale 1|2]
 //
 // Default poses = spawn + 4 orbit corners + 1 top-down. One angle is never enough:
 // the classic generated-3D failure is a facade that looks right from the front and
@@ -18,7 +18,7 @@ const argv = process.argv.slice(2);
 const flag = (n, d) => { const i = argv.indexOf(`--${n}`); return i < 0 ? d : argv[i + 1]; };
 const many = n => argv.reduce((a, v, i) => (v === `--${n}` ? [...a, argv[i + 1]] : a), []);
 
-const FLAGS_WITH_VALUE = new Set(['out', 'w', 'h', 'pose', 'only', 'plan']);
+const FLAGS_WITH_VALUE = new Set(['out', 'w', 'h', 'pose', 'only', 'plan', 'scale']);
 const positional = argv.filter((a, i) => {
   const prev = argv[i - 1];
   return !a.startsWith('--') && !(prev?.startsWith('--') && FLAGS_WITH_VALUE.has(prev.slice(2)));
@@ -26,6 +26,9 @@ const positional = argv.filter((a, i) => {
 const dir = resolve(positional[0] ?? '.');
 const out = resolve(flag('out', 'shots'));
 const W = +flag('w', 1280), H = +flag('h', 800);
+// Device pixel ratio. 2 for images you will look at; 1 when you only need to
+// know that something rendered — software WebGL costs four times as much at 2.
+const DSF = +flag('scale', 2);
 const only = flag('only', null);
 
 const parsePose = s => {
@@ -40,7 +43,7 @@ let failed = false;
 try {
   const cdp = await CDP.page(chrome.port);
   const log = await instrument(cdp);
-  await cdp.send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 2, mobile: false });
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: DSF, mobile: false });
 
   await goto(cdp, `http://127.0.0.1:${server.port}/index.html`, { settle: 250 });
 

@@ -15,6 +15,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 const D2R = Math.PI / 180;
 const EYE = 1.7;          // metres — human eye height. Do not "tune" this.
@@ -65,6 +66,90 @@ function skyTexture(skyHex, groundHex, sunPos) {
   return t;
 }
 
+/* -------------------------------------------------------------- surface ---
+   A flat colour is paint, not a material. Two tiling noise maps — one for
+   surface tooth, one for roughness break-up — cost nothing, need no assets, and
+   are the difference between "a grey box" and "a plastered wall".            */
+
+let _detail = null;
+function detailMaps() {
+  if (_detail) return _detail;
+  const S = 512;
+  let rs = 0x2f6e2b1;
+  const rnd = () => { rs = (Math.imul(rs, 1664525) + 1013904223) | 0; return (rs >>> 0) / 4294967296; };
+
+  const noise = document.createElement('canvas');
+  noise.width = noise.height = S;
+  const g = noise.getContext('2d');
+  g.fillStyle = '#808080'; g.fillRect(0, 0, S, S);
+  for (const [cells, alpha] of [[8, 0.5], [24, 0.34], [64, 0.24], [160, 0.16]]) {
+    const t = document.createElement('canvas');
+    t.width = t.height = cells;
+    const tg = t.getContext('2d');
+    const img = tg.createImageData(cells, cells);
+    for (let i = 0; i < cells * cells; i++) {
+      const v = 128 + (rnd() * 2 - 1) * 120;
+      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+      img.data[i * 4 + 3] = 255;
+    }
+    tg.putImageData(img, 0, 0);
+    g.globalAlpha = alpha;
+    g.globalCompositeOperation = 'overlay';
+    g.imageSmoothingEnabled = true;
+    g.drawImage(t, 0, 0, S, S);
+  }
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+
+  // Three maps out of the one noise field, each remapped to the range its
+  // channel actually wants. A raw mid-grey map used as roughness would halve
+  // every material's roughness and turn a plastered wall into satin.
+  const remap = (lo, hi) => {
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const x = c.getContext('2d');
+    x.fillStyle = `rgb(${lo * 255 | 0},${lo * 255 | 0},${lo * 255 | 0})`;
+    x.fillRect(0, 0, S, S);
+    x.globalAlpha = hi - lo;
+    x.drawImage(noise, 0, 0);
+    x.globalAlpha = 1;
+    return c;
+  };
+
+  const mk = (c, srgb) => {
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  // Deliberately faint. Cranked up, one shared noise field does not read as
+  // plaster and timber — it reads as burlap on everything, which is worse than
+  // a clean flat surface. Its only job is to stop a large wall being perfectly
+  // uniform under a moving highlight.
+  _detail = { rough: mk(remap(0.82, 1.0)) };
+  return _detail;
+}
+
+/** World-scaled UVs by dominant-axis projection, so one shared noise map tiles
+ *  at a real size on a wall, a table top and a tree trunk alike. Primitive UVs
+ *  are per-face 0..1 and would stretch the same texture differently on every
+ *  object in the scene. */
+function applyWorldUV(geo, scale) {
+  if (!geo.attributes.normal) geo.computeVertexNormals();
+  const pos = geo.attributes.position, nor = geo.attributes.normal;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const nx = Math.abs(nor.getX(i)), ny = Math.abs(nor.getY(i)), nz = Math.abs(nor.getZ(i));
+    let u, v;
+    if (ny >= nx && ny >= nz) { u = pos.getX(i); v = pos.getZ(i); }
+    else if (nx >= nz) { u = pos.getZ(i); v = pos.getY(i); }
+    else { u = pos.getX(i); v = pos.getY(i); }
+    uv[i * 2] = u / scale; uv[i * 2 + 1] = v / scale;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return geo;
+}
+
 /* --------------------------------------------------------- rounded boxes ---
    A perfectly sharp edge is the loudest tell of untouched CAD. Every real edge
    has a small radius that catches a highlight; 1-2 cm is invisible as geometry
@@ -85,27 +170,41 @@ function roundedBox(w, h, d, r) {
   shape.lineTo(-w / 2, -y);
   shape.quadraticCurveTo(-w / 2, -h / 2, -x, -h / 2);
   const geo = new THREE.ExtrudeGeometry(shape, {
+    // One bevel segment is enough at a ~2 cm radius and roughly halves the
+    // vertex count; ExtrudeGeometry is non-indexed, so tessellation is paid for
+    // three times over in the exported file.
     depth: Math.max(d - 2 * r, 1e-4), bevelEnabled: true,
-    bevelSize: r, bevelThickness: r, bevelSegments: 2, curveSegments: 2,
+    bevelSize: r, bevelThickness: r, bevelSegments: 1, curveSegments: 1,
   });
   geo.translate(0, 0, -(d / 2 - r));
   geo.computeVertexNormals();
   return geo;
 }
 
-const GEOM = {
+const RAW = {
   box: o => roundedBox(...(o.size ?? [1, 1, 1]),
                        o.bevel ?? Math.min(0.018, Math.min(...(o.size ?? [1, 1, 1])) * 0.14)),
   plane: o => new THREE.PlaneGeometry(...(o.size ?? [1, 1])),
-  sphere: o => new THREE.SphereGeometry(o.radius ?? 0.5, o.segments ?? 24, (o.segments ?? 24) >> 1),
+  sphere: o => new THREE.SphereGeometry(o.radius ?? 0.5, o.segments ?? 32, (o.segments ?? 32) >> 1),
   cylinder: o => new THREE.CylinderGeometry(
     o.radiusTop ?? o.radius ?? 0.5, o.radiusBottom ?? o.radius ?? 0.5,
-    o.height ?? 1, o.segments ?? 24),
-  cone: o => new THREE.ConeGeometry(o.radius ?? 0.5, o.height ?? 1, o.segments ?? 24),
+    o.height ?? 1, o.segments ?? 28),
+  cone: o => new THREE.ConeGeometry(o.radius ?? 0.5, o.height ?? 1, o.segments ?? 28),
   torus: o => new THREE.TorusGeometry(o.radius ?? 0.5, o.tube ?? 0.15, 16, o.segments ?? 32),
 };
 
+const GEOM = new Proxy(RAW, {
+  get: (t, k) => (typeof t[k] === 'function'
+    ? o => applyWorldUV(t[k](o), o.texScale ?? 1.4)
+    : t[k]),
+});
+
 function buildMaterial(def = {}) {
+  // No detail map by default. glTF packs roughness into a per-material
+  // metallic-roughness image, so one shared noise texture came out of the
+  // exporter 101 times and a small cabin weighed 13.8 MB. Opt in per material
+  // with `"detail": true` when you are not going to export.
+  const d = def.detail === true ? detailMaps() : null;
   const m = new THREE.MeshStandardMaterial({
     color: new THREE.Color(def.color ?? '#b9b9b9'),
     roughness: def.roughness ?? 0.85,
@@ -113,6 +212,7 @@ function buildMaterial(def = {}) {
     transparent: def.opacity != null && def.opacity < 1,
     opacity: def.opacity ?? 1,
     side: def.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+    roughnessMap: d ? d.rough : null,
   });
   if (def.emissive) {
     m.emissive = new THREE.Color(def.emissive);
@@ -415,6 +515,14 @@ async function boot() {
         samples: 16, distanceFallOff: 1.0, screenSpaceRadius: false,
       });
       composer.addPass(gtao);
+      const bloomOn = manifest.environment?.bloom ?? true;
+      if (bloomOn) {
+        composer.addPass(new UnrealBloomPass(
+          new THREE.Vector2(innerWidth, innerHeight),
+          manifest.environment?.bloomStrength ?? 0.32,
+          0.7,
+          manifest.environment?.bloomThreshold ?? 0.85));
+      }
       composer.addPass(new OutputPass());
       window.__ao = gtao;
     } catch (e) {

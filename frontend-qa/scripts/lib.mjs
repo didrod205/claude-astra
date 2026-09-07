@@ -111,10 +111,20 @@ export class CDP {
     this.#handlers.get(method).push(fn);
   }
 
-  send(method, params = {}) {
+  /** Every call is bounded. A browser that stops answering used to hang the
+   *  whole run silently — a suite that never finishes is worse than one that
+   *  fails. Override per call with `{ timeout: ms }`. */
+  send(method, params = {}, { timeout = 120000 } = {}) {
     const id = ++this.#id;
     this.#ws.send(JSON.stringify({ id, method, params }));
-    return new Promise((ok, bad) => this.#pending.set(id, { ok, bad, method }));
+    return new Promise((ok, bad) => {
+      const timer = setTimeout(() => {
+        this.#pending.delete(id);
+        bad(new Error(`${method} timed out after ${timeout / 1000}s`));
+      }, timeout);
+      this.#pending.set(id, { ok: v => { clearTimeout(timer); ok(v); },
+                             bad: e => { clearTimeout(timer); bad(e); }, method });
+    });
   }
 
   /** Evaluate an expression in the page; throws on page-side exceptions. */
