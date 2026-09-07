@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Walkable scene</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#0b0d10; }
+  canvas { display:block; }
+  #hud {
+    position:fixed; left:14px; bottom:14px; z-index:2;
+    font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+    color:#cfd6e0; background:rgba(10,12,16,.62); border:1px solid rgba(255,255,255,.10);
+    border-radius:8px; padding:8px 10px; pointer-events:none; white-space:pre;
+  }
+  #start {
+    position:fixed; inset:0; z-index:3; display:grid; place-content:center; gap:10px;
+    text-align:center; background:rgba(8,10,14,.80); cursor:pointer;
+    font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif; color:#e8edf4;
+  }
+  #start small { color:#93a0b1; font-size:12px; }
+  .hide { display:none !important; }
+</style>
+
+<div id="hud"></div>
+<div id="start"><strong>Click to walk</strong><small>W A S D · move &nbsp;|&nbsp; Shift · run &nbsp;|&nbsp; Space · jump &nbsp;|&nbsp; Esc · release</small></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module" src="./runtime.js"></script>
