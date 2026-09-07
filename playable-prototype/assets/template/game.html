@@ -1,0 +1,176 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Orchard — prototype</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body { margin:0; height:100%; background:#0e1116; display:grid; place-content:center;
+              font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#c9d3e0; }
+  canvas { background:#151a22; border-radius:10px; display:block; touch-action:none; }
+  #bar { display:flex; justify-content:space-between; padding:8px 2px; letter-spacing:.02em; }
+  #hint { text-align:center; color:#6f7c8d; padding-top:6px; }
+</style>
+
+<div>
+  <div id="bar"><span id="score">score 0</span><span id="lives">lives 3</span></div>
+  <canvas id="c" width="480" height="600"></canvas>
+  <div id="hint">← → move · Space start / restart</div>
+</div>
+
+<script>
+/* =====================================================================
+   ORCHARD — reference prototype.
+
+   Every prototype this skill produces implements the same contract, so one
+   playtest harness can drive all of them and an agent can play them as a
+   player. The contract is the whole point; the game is deliberately small.
+
+   window.__game:
+     actions            string[]  semantic inputs this game accepts
+     state()            object    { status, tick, score, lives, ... }
+     start()  reset()   void
+     input(action, down) void     semantic, never raw key codes
+     step(n)            void      advance n FIXED ticks, no real time needed
+     seed(n)            void      reseed the RNG; same seed = same run
+   ===================================================================== */
+
+const W = 480, H = 600, LANES = 5, LANE_W = W / LANES;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+
+// Deterministic RNG. Math.random() would make runs unreproducible and the
+// determinism check in playtest.mjs would fail — correctly.
+let rngState = 1;
+const mulberry32 = () => {
+  rngState |= 0; rngState = (rngState + 0x6D2B79F5) | 0;
+  let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+let G;
+const fresh = () => ({
+  status: 'menu', tick: 0, score: 0, lives: 3,
+  lane: 2, x: 2 * LANE_W + LANE_W / 2, items: [], flash: 0,
+});
+G = fresh();
+const held = { left: false, right: false };
+
+function spawn() {
+  const lane = Math.floor(mulberry32() * LANES);
+  G.items.push({
+    lane, x: lane * LANE_W + LANE_W / 2, y: -20,
+    rock: mulberry32() < 0.28,
+    vy: 2.4 + mulberry32() * 1.9,
+  });
+}
+
+function update() {
+  if (G.status !== 'playing') return;
+  G.tick++;
+  if (G.flash > 0) G.flash--;
+
+  if (held.left && !held.right) G.lane = Math.max(0, G.lane - (G.tick % 6 === 0 ? 1 : 0));
+  if (held.right && !held.left) G.lane = Math.min(LANES - 1, G.lane + (G.tick % 6 === 0 ? 1 : 0));
+  const target = G.lane * LANE_W + LANE_W / 2;
+  G.x += (target - G.x) * 0.28;
+
+  const rate = Math.max(16, 46 - Math.floor(G.tick / 260) * 5);
+  if (G.tick % rate === 0) spawn();
+
+  for (const it of G.items) it.y += it.vy;
+
+  const basketY = H - 54;
+  G.items = G.items.filter(it => {
+    if (it.y > basketY - 16 && it.y < basketY + 26 && Math.abs(it.x - G.x) < 42) {
+      if (it.rock) { G.lives--; G.flash = 10; } else G.score++;
+      return false;
+    }
+    if (it.y > H + 24) { if (!it.rock) { G.lives--; G.flash = 10; } return false; }
+    return true;
+  });
+
+  if (G.lives <= 0) { G.lives = 0; G.status = 'over'; }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#151a22'; ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = 'rgba(255,255,255,.045)'; ctx.lineWidth = 1;
+  for (let i = 1; i < LANES; i++) {
+    ctx.beginPath(); ctx.moveTo(i * LANE_W, 0); ctx.lineTo(i * LANE_W, H); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fillRect(0, H - 30, W, 30);
+
+  for (const it of G.items) {
+    ctx.beginPath();
+    ctx.fillStyle = it.rock ? '#6a7382' : '#f0a03c';
+    ctx.arc(it.x, it.y, it.rock ? 11 : 13, 0, Math.PI * 2); ctx.fill();
+    if (!it.rock) { ctx.fillStyle = '#4e8f4a'; ctx.fillRect(it.x - 1.5, it.y - 19, 3, 7); }
+  }
+
+  const by = H - 54;
+  ctx.fillStyle = G.flash > 0 ? '#c8483f' : '#d8dee8';
+  ctx.beginPath();
+  ctx.roundRect(G.x - 40, by - 6, 80, 26, 7); ctx.fill();
+  ctx.fillStyle = '#0e1116';
+  ctx.fillRect(G.x - 40, by - 6, 80, 5);
+
+  if (G.status !== 'playing') {
+    ctx.fillStyle = 'rgba(10,13,18,.80)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#e8eef6'; ctx.textAlign = 'center';
+    ctx.font = '600 26px ui-sans-serif,system-ui,sans-serif';
+    ctx.fillText(G.status === 'menu' ? 'Orchard' : 'Game over', W / 2, H / 2 - 12);
+    ctx.font = '14px ui-monospace,monospace'; ctx.fillStyle = '#93a1b3';
+    ctx.fillText(G.status === 'menu' ? 'press Space' : `caught ${G.score} — press Space`, W / 2, H / 2 + 18);
+  }
+
+  document.getElementById('score').textContent = `score ${G.score}`;
+  document.getElementById('lives').textContent = `lives ${G.lives}`;
+}
+
+/* ------------------------------------------------------------ contract */
+
+const api = {
+  actions: ['left', 'right', 'start'],
+
+  state: () => ({
+    status: G.status, tick: G.tick, score: G.score, lives: G.lives,
+    lane: G.lane, x: +G.x.toFixed(2), items: G.items.length,
+  }),
+
+  input(action, down = true) {
+    if (action === 'left') held.left = down;
+    else if (action === 'right') held.right = down;
+    else if (action === 'start' && down && G.status !== 'playing') api.start();
+  },
+
+  start() {
+    const keepSeed = rngState;
+    G = fresh(); rngState = keepSeed;
+    held.left = held.right = false;
+    G.status = 'playing';
+  },
+
+  reset() { G = fresh(); held.left = held.right = false; },
+
+  seed(n) { rngState = n | 0; },
+
+  step(n = 1) { for (let i = 0; i < n; i++) update(); draw(); },
+};
+window.__game = api;
+
+/* --------------------------------------------------------- human input */
+
+const KEYS = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'start' };
+addEventListener('keydown', e => { const a = KEYS[e.code]; if (a) { e.preventDefault(); api.input(a, true); } });
+addEventListener('keyup', e => { const a = KEYS[e.code]; if (a) api.input(a, false); });
+
+api.seed(Date.now() & 0x7fffffff);
+let acc = 0, last = performance.now();
+(function loop(now) {
+  acc += Math.min(now - last, 100); last = now;
+  while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+  draw();
+  requestAnimationFrame(loop);
+})(last);
+</script>
