@@ -7,9 +7,16 @@ accessibility elements, each prefixed `[N]`. That N is what `app_click`,
 `app_type`, and `app_batch` take as `element_index`, and it targets the
 element's centre directly.
 
-Use it whenever the element is listed. It survives scrolling, window resizing,
-and re-layout; a coordinate captured before a re-render points at whatever moved
-into that spot.
+Use it whenever the element is listed — it targets the element's own centre
+rather than hit-testing a point, so it works where a coordinate lands on an
+overlay or a container.
+
+**But the numbering is rebuilt on every screenshot.** It is an index into that
+one summary, not an identity. A single Calculator batch shifted every index by
+one because the expression line appeared; switching the window to scientific mode
+renumbered all 56 elements and changed the window's width from 230 to 674. Both
+`element_index` and `coordinate` are anchored to the last screenshot. Re-read
+after anything that changes the window.
 
 The inline summary is short — only the first few actionable elements. When what
 you need isn't there:
@@ -37,15 +44,24 @@ by title alone.
 | `AXStaticText` | a label; useful for reading state, not for clicking |
 | `AXGroup` / `AXSplitGroup` | containers; search inside them |
 
-## What `app_click` will not do
+## What `app_click` will not do — and what it will do badly
 
-Menu-presenting controls (pop-up menus, pull-down menus, toolbar gear menus) and
-right-clicks are **refused**, because opening them would bring the app to the
-front and break the background contract.
+An `AXPopUpButton`, an `AXMenuButton`, or a right-click is **refused outright**,
+because opening the menu would front the app. The error is good: it names
+`app_menu` and `app_release` as the ways forward. TextEdit's font picker
+(`AXPopUpButton '글자체'`) behaves exactly this way.
 
-The answer is almost always `app_menu` — nearly every dropdown command also
-exists in the menu bar. When it genuinely doesn't (a custom in-window picker),
-that is one of the few legitimate reasons to escalate to display-scope tools.
+**A plain `AXButton` that opens a menu is not refused.** Calculator's toolbar
+"모드" button returned `ok (AXPress on AXButton '모드' via AXWindow>AXToolbar)`
+and the window was untouched — no menu, no mode change, no error. The guard keys
+off the accessibility role, not off what the control actually does, so a
+success result here means "the press was dispatched", not "the thing happened".
+
+The answer to both is almost always `app_menu` — nearly every dropdown command
+also exists in the menu bar, and `보기 > 공학용` switched the mode instantly after
+the button press had silently failed. When there genuinely is no menu equivalent
+(a custom in-window picker), that is one of the few legitimate reasons to
+escalate to display-scope tools.
 
 ## `unsupported(canvas)`
 
@@ -58,6 +74,20 @@ document, a Keynote slide — has nothing to hit-test against. Two fallbacks:
   document once, then `type` with `target: "focused"`.
 
 If neither works, the app is a true canvas and you need display-scope control.
+
+## When the AX walk truncates
+
+A large window can exceed the accessibility walk, and the summary says so:
+
+```
+…(the accessibility walk was truncated — parts of this window's UI are NOT
+listed here or in app_ax_find; use coordinates from the screenshot for
+anything you can see but can't find by index)
+```
+
+That is the one case where **coordinates outrank `element_index`**, and
+`app_ax_find` will not rescue you — it searches the same truncated capture.
+Calculator in scientific mode hits this at 56 elements.
 
 ## Coordinates, when you must
 
@@ -81,13 +111,20 @@ most recently screenshotted for that app.
 
 - `app_type` with `mode: "replace"` overwrites the field; `"insert"` adds at the
   cursor. Replace is usually what you want for a field you are setting.
+- Replacing a **non-empty** field is refused unless you pass
+  `overwrite_existing: true`, and that flag makes the call return the previous
+  content so you can restore it. Since a background write often does not reach
+  the app's undo stack, that returned value **is** your undo — keep it.
 - `disable_substitutions: true` stops smart quotes and dashes — essential for
   code, paths, and anything a parser will read.
 - Multi-line text is much faster when `clipboardWrite` was granted at
   `request_access` time; ask for it up front if you know you'll paste.
-- `app_key` takes a combo string (`"cmd+s"`, `"shift+tab"`, `"return"`). Prefer
-  `app_menu` for anything that has a menu equivalent — it is explicit and cannot
-  be swallowed by a focused field.
+- `app_key` in the background accepts only `return`, `escape`, `backspace`,
+  `delete`, and `cmd+a`. Everything else needs the menu bar, which you should
+  prefer anyway — `app_menu` is explicit and cannot be swallowed by a focused
+  field. Even the allowed keys can refuse: `delete` on a non-empty text area was
+  blocked because the only background fallback would have replaced the whole
+  field.
 
 ## Reading state without clicking
 

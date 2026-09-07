@@ -88,9 +88,25 @@ silently passed. Same for PyMuPDF and the two PDF checks.
 No skill's *judgement* is tested here, only its tooling. `verify.sh` proves the
 audit catches a trapped spawn — not that a scene looks good; proves the sweep
 catches an overflow — not that a page is usable; proves the playtest catches a
-dead input — not that a game is fun. `desktop-app-driver` has no automated checks
-at all: it is method and per-app knowledge, and its correctness is whether
-following it produces working sessions.
+dead input — not that a game is fun.
+
+`desktop-app-driver` is absent from `verify.sh` and always will be: it drives the
+user's own machine through a permission dialog, so there is nothing to automate.
+It was instead **driven by hand** against Calculator and TextEdit — computing
+12 × 7, switching modes through the menu bar, typing into a document, and
+deliberately provoking the failure paths. That session corrected six things in
+the skill, three of them claims that were simply wrong:
+
+- `element_index` was described as surviving re-layout. It does not — the
+  numbering is rebuilt on every screenshot, and one batch shifted every index.
+- Menu-presenting controls were described as refused. An `AXPopUpButton` is; a
+  plain `AXButton` that opens a menu returns `ok` and silently does nothing.
+- "Know the undo path first" was described as reading the Edit menu. Undo was
+  *listed and disabled* right after a background write, because the write never
+  reached the app's undo stack.
+
+The two apps are now written up as verified profiles in
+[`references/app-profiles.md`](desktop-app-driver/references/app-profiles.md).
 
 The one bug this suite was written after finding: the size-ladder check silently
 skipped `.docx` and `.pptx`, because those formats declare point sizes per run

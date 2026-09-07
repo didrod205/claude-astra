@@ -8,6 +8,8 @@ after two identical failures the cause is structural.
 | result | means | do |
 |---|---|---|
 | `ineffective` | the write was accepted, the app hasn't visibly responded | screenshot. It may have worked. If not, the target was wrong |
+| plain `ok` | the action was **dispatched**, not that it worked | still screenshot. `ok (AXPress on AXButton '모드')` came back from a press that changed nothing at all |
+| `disabled` on a menu item | the item exists but is greyed out — usually the app is not frontmost or has no key window | fix the precondition; do not retry |
 | `unsupported(canvas)` | nothing hit-testable at that coordinate | retry with `element_index`, then `target: "focused"` |
 | refused (menu control) | you clicked a dropdown / gear / right-click | use `app_menu` |
 | a tier error | the app is granted read-only or click-only | browsers → browser tools; terminals and IDEs → Bash |
@@ -41,17 +43,19 @@ Nine times in ten the screenshot answers it immediately:
 
 ## 4. Batches
 
-`app_batch` stops on the first error, but **not** on `ineffective`. So a batch
-can report success while step two silently did nothing and steps three to six
-acted on the wrong state. Two habits fix this:
+`app_batch` stops on the first error, but **not** on `ineffective` — and a
+silently-no-op press reports plain `ok`, which is not an error either. So a batch
+can report "All 7 actions ok" while one step did nothing and the rest acted on
+the wrong state. Two habits fix this:
 
 - End every batch with `{"action":"screenshot"}`.
 - Keep destructive actions out of long batches. Run them as single calls with a
   screenshot either side.
 
 When a batch fails partway, do not re-run it whole — the earlier actions already
-applied and re-applying them may double the effect. Screenshot, work out where
-it stopped, resume from there.
+applied and re-applying them may double the effect. The result tells you where:
+a refused `delete` reported `Batch stopped at actions[2] (key). Completed 2 of 4;
+1 not run.` Screenshot, confirm that reading, resume from there.
 
 ## 5. When you are properly stuck
 

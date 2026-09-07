@@ -83,3 +83,76 @@ possible way to build a report.
 well. Read every dialog before pressing anything: bundled extras, licence
 agreements, and destination pickers all live in "Next". Never accept a licence
 or change a destination the user didn't ask for.
+
+---
+
+## 계산기 (Calculator) · com.apple.calculator · macOS 26 · menus in Korean
+
+Driven end to end in the background; every line here was observed, not assumed.
+
+**Access:** `request_access({ apps: ["com.apple.calculator"] })` → tier `full`.
+The display name `"계산기"` does **not** resolve — use the bundle id.
+
+**Windows:** one, `window_id` from `open_application`'s reply. Launching in the
+background does not front it.
+
+**Menu bar (verified):** `Apple, 계산기, 편집, 보기, 윈도우, 도움말`
+| command | path |
+|---|---|
+| basic mode | `["보기", "기본"]` |
+| scientific mode | `["보기", "공학용"]` |
+| programmer mode | `["보기", "프로그래머"]` |
+| show history | `["보기", "기록 보기"]` |
+
+**AX coverage:** excellent — every key is an `AXButton` with a Korean title
+(`"등호"`, `"곱하기"`, `"모두 지우기"`, `"부호 변경"`). Basic mode has 27 elements,
+25 actionable; the inline summary shows only the first 15, so `app_ax_find` with
+`role: "AXButton"` is the way to see the rest. Scientific mode reaches 56 and the
+**walk truncates** — coordinates are the documented fallback there.
+
+**Traps:**
+- The toolbar `"모드"` button is an `AXButton`, so it is not refused, but pressing
+  it does nothing in the background. Use `["보기", …]` instead.
+- Indices shift whenever the display gains the expression line, and are entirely
+  renumbered when the mode changes (the window also goes 230 → 674 px wide).
+
+**Undo path:** none — it is a calculator. `"모두 지우기"` resets.
+
+**A verified sequence** (12 × 7 = 84, ending in the mandatory screenshot):
+
+```
+app_batch com.apple.calculator [
+  {click element_index: 모두 지우기}, {click: 1}, {click: 2},
+  {click: 곱하기}, {click: 7}, {click: 등호}, {screenshot scale: 0.5} ]
+→ All 7 actions ok; display reads 84
+```
+
+## 텍스트 편집기 (TextEdit) · com.apple.TextEdit · macOS 26 · menus in Korean
+
+**Access:** bundle id, tier `full`. `"텍스트 편집기"` does not resolve.
+
+**Windows:** launching gives **no window** — `app_list_windows` returns `[]`.
+Create one with `["파일", "신규"]` (not "새로운 항목").
+
+**Menu bar (verified):** `파일` holds `신규 · 열기… · 닫기 · 저장 · 별도 저장… ·
+복제 · PDF로 내보내기…`; `편집` holds `실행 취소 · 모두 선택 · 대체 · 맞춤법 및 문법`.
+
+**AX coverage:** the document body is `[0] AXTextArea` — fully writable with
+`app_type({ element_index: 0 })`, no canvas fallback needed. The format bar is
+`AXCheckBox/AXSegment` for bold/italic and `AXPopUpButton` for 글자체 / 스타일 /
+줄 간격, plus `AXMenuButton` for 목록 스타일.
+
+**Traps:**
+- `AXPopUpButton '글자체'` is refused — correctly, with guidance.
+- **`편집 > 실행 취소` is disabled immediately after a background `app_type`.** The
+  write goes through `AXSelectedText` and never enters TextEdit's undo stack. Do
+  not plan on undoing a background edit.
+- `파일 > 닫기` is disabled while the app is not frontmost, so you cannot tidy up
+  the window you created from the background.
+- `app_key delete` on a non-empty text area is refused; emptying a field means
+  `app_type` with `mode: "replace"` and `overwrite_existing: true`.
+- Autosave gives an untitled document a `.rtf` name in the title bar without
+  writing a file to disk.
+
+**Undo path:** the `overwrite_existing: true` result, which returns the previous
+content verbatim for you to write back. Nothing else.

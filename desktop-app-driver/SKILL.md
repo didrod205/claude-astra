@@ -48,8 +48,15 @@ detail to slip past them.
 ## Before anything: access
 
 ```
-request_access({ apps: ["KiCad", "Numbers"], reason: "<the task, not the mechanism>" })
+request_access({ apps: ["com.apple.calculator", "com.apple.TextEdit"],
+                 reason: "<the task, not the mechanism>" })
 ```
+
+**Use bundle identifiers.** Display names are resolved against installed apps, and
+on a localised system they can fail even when they are exactly what the Finder
+shows — `"계산기"` and `"텍스트 편집기"` both came back `notInstalled` while
+`com.apple.calculator` and `com.apple.TextEdit` were granted immediately. Get the
+id with `defaults read /System/Applications/<App>.app/Contents/Info CFBundleIdentifier`.
 
 One call, every app you expect to need — the user sees a single dialog and
 approves the set. Call it again mid-task to add one; grants persist. Options
@@ -87,18 +94,32 @@ In order of preference:
 | | when |
 |---|---|
 | `app_menu({ path: ["File", "Export…"] })` | **any menu command.** Prefer this over the ⌘ shortcut — it is explicit, it works in the background, and it cannot land on the wrong app |
-| `app_click({ element_index: N })` | anything in the AX summary. Survives scrolling and re-layout; a coordinate does not |
+| `app_click({ element_index: N })` | anything in the AX summary. Targets the element's centre instead of hit-testing a point, so it works where a coordinate lands on the wrong layer |
 | `app_ax_find({ role: "AXButton", title_contains: "Save" })` | the control you need isn't in the screenshot's short summary |
 | `app_click({ coordinate: [x, y] })` | last resort — canvases, custom-drawn UI |
 | `app_click({ target: "focused" })` | canvas-heavy apps (Pages, Keynote) where the text cursor is already in the right place |
 
-`app_click` **refuses** pop-up menus, pull-down menus, toolbar gear menus, and
-right-clicks, because opening them would front the app. Use the menu-bar
-equivalent through `app_menu`.
+`app_click` **refuses** an `AXPopUpButton`, `AXMenuButton`, or a right-click,
+with an error naming `app_menu` and `app_release` as the ways out. Use the
+menu-bar equivalent.
+
+The trap is the other half: a plain **`AXButton` that happens to open a menu is
+not refused.** Calculator's toolbar "모드" button returned `ok (AXPress on
+AXButton '모드')` and nothing whatsoever happened — no menu, no state change,
+success reported. The refusal keys off the role, not the behaviour. This is the
+strongest argument for the screenshot-after-every-step rule: the tool cannot tell
+you that a well-formed, accepted press did nothing.
 
 Coordinates are in the **full-resolution frame of the most recent
 `app_screenshot`**, which a scaled screenshot reports back to you — not the
 pixels of the scaled image you are looking at.
+
+**Indices are not stable either.** `element_index` is a position in the *last
+screenshot's* summary, renumbered every time. One batch on Calculator — clear,
+1, 2, ×, 7, = — added a single element for the expression line and shifted every
+index by one: `[5]` went from `7` to `8`, `[13]` from `1` to `2`. Switching that
+same window to scientific mode renumbered all 56. Re-read the summary after every
+screenshot; never carry an index across a state change.
 
 ## Menus are in the user's language
 
@@ -111,6 +132,15 @@ app_menu({ app, list: "파일" })     → that menu's items
 ```
 
 List first, then walk. Matching is case-insensitive and ignores trailing `…`.
+Guessing loses even in English: TextEdit's New is `신규`, not `새로운 항목`.
+
+**A listed item can still be disabled.** `파일 > 닫기` and `편집 > 실행 취소` both
+appear in the listing and both refused to be pressed, because the app was not
+frontmost and had no key window. The error says so explicitly — treat it as a
+precondition to fix, not a failure to retry.
+
+`app_key` in the background is limited to `return`, `escape`, `backspace`,
+`delete`, and `cmd+a`. Anything else needs the menu bar.
 
 ## Batch only what you have already proven
 
@@ -128,12 +158,18 @@ after it. Put one at the end, always.
 Destructive here means: overwriting a file, deleting rows, applying a filter that
 drops data, running a computation that replaces the source.
 
-1. **Know the undo path first.** `app_menu({ list: "편집" })` and read whether Undo
-   is there and what it says it will undo.
-2. **Prefer a copy.** Save As / Duplicate before the edit, and work on the copy.
-3. **Screenshot before, not just after.** It is the only record of what the
+1. **Do not trust Undo to save you.** A background `app_type` writes through the
+   accessibility API, which for many apps never touches their undo stack. After
+   typing a line into TextEdit, `편집 > 실행 취소` was **disabled** — the edit had
+   landed and was not undoable. Listing the menu tells you Undo exists; it does
+   not tell you your change is reversible.
+2. **Capture the old value instead.** `app_type` with `overwrite_existing: true`
+   returns the previous content in its result specifically so you can put it
+   back. That is the real undo for background edits.
+3. **Prefer a copy.** Save As / Duplicate before the edit, and work on the copy.
+4. **Screenshot before, not just after.** It is the only record of what the
    previous state was.
-4. **For a long run, checkpoint** — save and screenshot every few steps, so a
+5. **For a long run, checkpoint** — save and screenshot every few steps, so a
    failure at step 40 doesn't cost you steps 1–39.
 
 Then do the thing. Confirm with the user first only if it is outward-facing or
