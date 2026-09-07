@@ -18,6 +18,11 @@ the DevTools protocol, or Python standard library. Nothing to install.
 | [`frontend-qa`](frontend-qa) | verify a page at three widths and drive its real flows, then report what's broken with evidence |
 | [`house-style`](house-style) | pull the house style out of the user's own documents, then check new ones actually match it |
 
+<p align="center">
+  <img src="media/townhouse-plan.png" width="820" alt="Cutaway plan of a generated two-storey townhouse: stairs, furniture, doorway and stairwell opening visible from above">
+  <br><em>A scene <code>walkable-3d</code> built from one sentence, cut through at 2.6&nbsp;m — the only view that shows an interior, and the one the default six angles could not.</em>
+</p>
+
 ## The thing they have in common
 
 Each one is built around a verification loop, because in all five domains the
@@ -197,7 +202,11 @@ You get `scene/` (three files), six angles plus a cutaway plan per storey in
 `step_07`, `balc_rail_n` — so a person can open it in Blender and move the bed.
 
 **Add `--plan` for anything with an interior.** A roofed building is opaque from
-all six default angles.
+all six default angles — this is what the six show you instead:
+
+<p align="center">
+  <img src="media/townhouse-exterior.png" width="760" alt="Exterior three-quarter view of the same townhouse: brick walls, flat roof, doorway, path and trees">
+</p>
 
 ### playable-prototype
 
@@ -221,6 +230,11 @@ playtest — 3 prototype(s), 2400 ticks each
 
   3 clean · 0 with warnings · 0 not playable
 ```
+
+<p align="center">
+  <img src="media/prototypes.png" width="900" alt="Three lighthouse prototypes side by side: a rotating beam, a turn-based watch with lanes, and a grid of buoys">
+  <br><em>One brief, three directions — reflex, turn-based deliberation, indirect placement. Not three reskins.</em>
+</p>
 
 The bot holds every declared input and fails the ones that change nothing, runs
 the same seed twice and fails a disagreement, and plays at random to check the
@@ -322,6 +336,11 @@ Calculator and TextEdit sessions, in
 node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
 open playable-prototype/assets/template/game.html
 ```
+
+<p align="center">
+  <img src="media/cabin-spawn.png" width="760" alt="First-person arrival view of the bundled cabin scene: open doorway, lit lamp inside, trees and a stone path">
+  <br><em>The bundled example scene, from where you spawn. Click, then WASD.</em>
+</p>
 
 ## Requirements
 
