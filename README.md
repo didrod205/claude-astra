@@ -163,43 +163,164 @@ cp -r claude-astra/walkable-3d ~/.claude/skills/
 
 Or point Claude Code at the checkout and invoke a skill by name.
 
-## Try it
+## Using them
+
+These are skills, not CLIs — you ask Claude in plain language and it runs the
+loop. The commands under each are what it actually executes, and every output
+block below is real, copied from the session that built and dogfooded these.
+
+### walkable-3d
+
+> *"Make me a two-storey townhouse I can walk into and go up the stairs."*
+> *"이 사진으로 걸어다닐 수 있는 3D 씬 만들어줘"*
+
+It lays the scene out on a metre grid first, writes `scene.json`, then audits and
+photographs it until both are clean — the manifest is the deliverable, so
+iterating means editing numbers, not rewriting code.
 
 ```bash
-./verify.sh          # all 17 checks, ~3 minutes
+node walkable-3d/scripts/audit.mjs      scene/
+node walkable-3d/scripts/shot.mjs       scene/ --out shots --plan 2.6 --plan 5.4
+node walkable-3d/scripts/serve.mjs      scene/ --open        # walk it yourself
+node walkable-3d/scripts/export-glb.mjs scene/ --out house.glb
 ```
 
-Walk the bundled 3D scene — click the page, then WASD; `G` exports a `.glb`:
+```
+audit - townhouse
+  67 objects (25 solid) - 60.0 x 7.8 x 60.0 m - 57 draw calls - 2k tris
+
+  ok - no structural problems
+```
+
+You get `scene/` (three files), six angles plus a cutaway plan per storey in
+`shots/`, and a `.glb` whose objects keep the names you gave them — `w_g_s_l`,
+`step_07`, `balc_rail_n` — so a person can open it in Blender and move the bed.
+
+**Add `--plan` for anything with an interior.** A roofed building is opaque from
+all six default angles.
+
+### playable-prototype
+
+> *"Prototype a game about a lighthouse keeper — a few different directions."*
+> *"이 아이디어로 프로토타입 3개 뽑아줘"*
+
+It picks directions that differ on an axis that changes how the thing *plays* —
+reflex vs. deliberation, direct vs. indirect control — builds each as one
+self-contained HTML file, then has a bot play all of them.
 
 ```bash
-node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
+node playable-prototype/scripts/playtest.mjs prototypes/ --out shots --ticks 2400
 ```
 
-Audit it and photograph it from six angles:
+```
+playtest — 3 prototype(s), 2400 ticks each
 
-```bash
-node walkable-3d/scripts/audit.mjs walkable-3d/assets/template
-node walkable-3d/scripts/shot.mjs  walkable-3d/assets/template --out shots
+  ok  a-beam    bot scored 8,  over @ tick 1032 · 2/2 actions live · 5 ms/1000t
+  ok  b-watch   bot scored 9,  over @ tick 510  · 3/3 actions live · 6 ms/1000t · turn-based
+  ok  c-buoys   bot scored 27, survived 2400    · 5/5 actions live · 9 ms/1000t
+
+  3 clean · 0 with warnings · 0 not playable
 ```
 
-Play the reference game prototype, or let a bot play it for you:
+The bot holds every declared input and fails the ones that change nothing, runs
+the same seed twice and fails a disagreement, and plays at random to check the
+game can be scored in at all. You can drive any prototype the same way:
 
-```bash
-open playable-prototype/assets/template/game.html
-node playable-prototype/scripts/playtest.mjs playable-prototype/assets/template/game.html --out shots
+```js
+__game.seed(7); __game.reset(); __game.start();
+__game.input('right', true); __game.step(60); __game.state()
 ```
 
-Read a house style out of a document and check another against it:
+### frontend-qa
 
-```bash
-python3 house-style/scripts/style.py extract their-deck.pptx -o style.json
-python3 house-style/scripts/style.py check  your-draft.pptx --spec style.json
-```
+> *"QA this before I ship it."* · *"이거 왜 안 눌려?"* · *"테스트해줘"*
 
-Sweep a page at three widths:
+Two halves. The sweep is one command; the flows are a browser session where each
+action is followed by re-reading the DOM, the console, and the network.
 
 ```bash
 node frontend-qa/scripts/qa-run.mjs http://localhost:3000 --out qa
+node frontend-qa/scripts/qa-run.mjs ./dist --widths 390,768,1440 --json
+```
+
+```
+qa sweep - http://127.0.0.1:56392/
+  390px - 1 error(s), 1 warning(s)
+
+  every width
+    x [viewport] no <meta name="viewport"> — the phone lays this out at 980px and scales it down
+    ! [a11y] 0 visible <h1> on the page
+```
+
+Findings identical at every width print once, so responsive breakage stands out
+from real breakage. Read `viewport` and `console` first — until those are clean,
+nothing else in the report means what it says.
+
+### house-style
+
+> *"Write the Q3 deck in the same style as these three."*
+> *"우리 템플릿 유지해서 보고서 하나 써줘"*
+
+Give it two or three of your own files. It reads the theme rather than guessing
+at it, and checks the finished file back against what it read.
+
+```bash
+python3 house-style/scripts/style.py extract deck.pptx report.docx -o style.json
+python3 house-style/scripts/style.py check  draft.pptx --spec style.json
+```
+
+```
+house style from 1 sample(s): real.pptx
+
+  fonts     Arial, Calibri
+  palette   #000000 #FFFFFF #1F497D #EEECE1 #4F81BD #C0504D #9BBB59 #8064A2
+  sizes     9.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 40.0, 44.0 pt
+  slide_in  [10.0, 7.5]
+  layouts   Title Slide, Section Header, Two Content, Comparison, Title Only …
+
+style check — 1 file(s) against pptx-style.json
+
+  x drift.pptx  [font] typefaces not in the house set: Impact
+  x drift.pptx  [geometry] slide_in is [13.33, 7.5] but the house style is [10.0, 7.5]
+  ! drift.pptx  [color] colours outside the palette: #D91C21
+  ! drift.pptx  [size] point sizes not in the house ladder: [54.0]
+```
+
+The `docx` / `pptx` / `xlsx` skills write the file; this one decides what goes in
+it and proves it matches. The layout names are worth more than any colour value —
+building slides from the deck's own layouts is what makes it look native.
+
+### desktop-app-driver
+
+> *"Lay this schematic out in KiCad."* · *"이 앱에서 직접 해줘"* · *"설치하고 테스트해줘"*
+
+No scripts — it is method plus per-app knowledge, driving the computer-use tools
+in the **background**, so the target window never comes to the front and you keep
+working. Grant by bundle id, target by accessibility index, prefer the menu bar,
+and screenshot after every step.
+
+```
+request_access({ apps: ["com.apple.calculator"] })        → tier full
+app_screenshot                                            → image + [N] AX summary
+app_ax_find({ role: "AXButton" })                         → 25 buttons, Korean titles
+app_batch([ click 모두 지우기, 1, 2, 곱하기, 7, 등호, screenshot ])
+   → All 7 actions ok; display reads 84
+app_menu({ path: ["보기", "공학용"] })                     → switched mode
+```
+
+Two things it will not let you skip: a plain `ok` means the action was
+*dispatched*, not that it worked — so every batch ends in a screenshot — and a
+background write often never reaches the app's undo stack, so `overwrite_existing`
+returning the old value is your only undo. Both are written up, with the
+Calculator and TextEdit sessions, in
+[`references/app-profiles.md`](desktop-app-driver/references/app-profiles.md).
+
+## Try it without asking Claude
+
+```bash
+./verify.sh                                                   # all 17 checks, ~3 min
+node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
+open playable-prototype/assets/template/game.html
 ```
 
 ## Requirements
