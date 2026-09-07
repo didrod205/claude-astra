@@ -61,6 +61,24 @@ JSON
 expect 2 "audit fails a scene that does not hold the player up" -- \
   node walkable-3d/scripts/audit.mjs "$TMP/falling"
 
+# Terrain is walkable, and the spawn check has to ask the walk controller where
+# the ground is: a heightfield's bounding box reaches far above the player, so a
+# box-based guess reports "no surface under the spawn" on a hillside.
+mkdir -p "$TMP/terrain" && cp walkable-3d/assets/template/index.html walkable-3d/assets/template/runtime.js "$TMP/terrain/"
+cat > "$TMP/terrain/scene.json" <<'JSON'
+{ "meta": { "name": "hills" },
+  "spawn": { "position": [0, 1.7, 0], "lookAt": [20, 6, -30] },
+  "materials": { "g": { "color": "#ffffff", "roughness": 1 } },
+  "objects": [
+    { "id": "terrain", "kind": "terrain", "size": [200, 200], "segments": 120, "seed": 21,
+      "amplitude": 18, "frequency": 0.012, "octaves": 4,
+      "color": "#5f7a48", "slopeColor": "#8f8578", "slopeAngle": 24,
+      "flatten": [{ "at": [0, 0], "radius": 6, "falloff": 12, "height": 0 }],
+      "material": "g", "castShadow": false } ] }
+JSON
+expect 0 "a terrain scene audits clean and holds the player up" -- \
+  node walkable-3d/scripts/audit.mjs "$TMP/terrain"
+
 node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn --plan 1.5 --scale 1 --w 640 --h 400 >/dev/null 2>&1
 [ -s "$TMP/shots/plan-1_5.png" ] && ok "--plan cuts through the roof for an interior view" || bad "--plan produced no image"
 

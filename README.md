@@ -17,7 +17,7 @@ the DevTools protocol, or Python standard library. Nothing to install.
 
 | skill | does |
 |---|---|
-| [`walkable-3d`](walkable-3d) | prompt / photo / sketch → a walkable Three.js scene, structurally audited, exported to `.glb` with every object still named and separable for Blender or Unreal |
+| [`walkable-3d`](walkable-3d) | prompt / photo / sketch → a walkable Three.js scene on generated terrain, structurally audited, exported to `.glb` with every object still named and separable for Blender or Unreal |
 | [`playable-prototype`](playable-prototype) | one brief → several genuinely different browser game prototypes, each proven playable — and measured for whether the inputs carry a decision at all |
 | [`frontend-qa`](frontend-qa) | verify a page at three widths and drive its real flows, then report what's broken with evidence |
 | [`house-style`](house-style) | pull the house style out of the user's own documents — the palette *and* the writing — then check new ones actually match |
@@ -59,7 +59,7 @@ whether bullets end in a full stop, how long a heading runs.
 
 ## Verified
 
-`./verify.sh` reproduces every claim below. 23 checks, no arguments, no setup —
+`./verify.sh` reproduces every claim below. 24 checks, no arguments, no setup —
 it builds its own fixtures in a temp directory and cleans up after itself.
 
 ```
@@ -68,6 +68,7 @@ walkable-3d
   ok    audit fails a scene with the player trapped in geometry
   ok    shot.mjs renders a frame headlessly
   ok    audit fails a scene that does not hold the player up
+  ok    a terrain scene audits clean and holds the player up
   ok    --plan cuts through the roof for an interior view
   ok    glTF export keeps object names and parenting
 playable-prototype
@@ -217,8 +218,13 @@ all six default angles — this is what the six show you instead:
 </p>
 
 <p align="center">
-  <img src="media/cabin-exterior.png" width="820" alt="Exterior of the same cabin: plinth course, corner boards, a door standing ajar with the lit interior showing, low-poly conifers framing rather than blocking">
-  <br><em>And from outside. A plinth to sit the walls on the ground, corner boards to break the facade, a door leaf ajar so the lit interior shows through — none of it texture.</em>
+  <img src="media/cabin-exterior.png" width="820" alt="Exterior of the same cabin on rolling terrain: plinth course, corner boards, a door standing ajar with the lit interior showing, conifers framing rather than blocking">
+  <br><em>And from outside, on a heightfield levelled where the building sits. A plinth to sit the walls on the ground, corner boards to break the facade, a door leaf ajar so the lit interior shows through — none of it texture.</em>
+</p>
+
+<p align="center">
+  <img src="media/terrain.png" width="820" alt="Hill country generated from seeded noise, rock colouring on the steep faces and green in the folds, with one flattened disc carrying a marker post">
+  <br><em><code>kind: "terrain"</code> — seeded value noise, vertex colours blended by slope, and discs you flatten so a building has ground to stand on. It is a mesh, so it is walkable without doing anything else.</em>
 </p>
 
 ### playable-prototype
@@ -389,7 +395,7 @@ exposed — typing into its search field filtered a table the tree never describ
 ## Try it without asking Claude
 
 ```bash
-./verify.sh                                                   # all 23 checks, ~4 min
+./verify.sh                                                   # all 24 checks, ~5 min
 node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
 open playable-prototype/assets/template/game.html
 ```

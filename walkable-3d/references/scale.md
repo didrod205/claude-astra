@@ -60,6 +60,19 @@ shows up in an orbit screenshot — only in the spawn shot and only if you look.
 | fridge | 0.70 × 0.70 × 1.80 |
 | TV, 55" | 1.25 × 0.08 × 0.72 |
 
+## Terrain
+
+| | |
+|---|---|
+| gentle parkland | `amplitude` 3–6, `frequency` 0.015 |
+| rolling countryside | 8–14, 0.012 |
+| hill country | 20–30, 0.010 |
+| a flat building site inside any of them | `flatten` with `falloff` ≥ the surrounding amplitude |
+
+A 150 m terrain at 180 segments is about 65 k triangles — more than the entire
+rest of a domestic scene, and worth checking against your budget before going
+finer. Detail past roughly one quad per metre is invisible at eye height.
+
 ## Outdoors and urban
 
 | | m |
@@ -137,11 +150,12 @@ until you give it these:
 4. **Trees that frame rather than block.** Push them to the sides and back. Four
    large cones directly in front of the subject is the most common way a good
    building is photographed badly. Vary height, girth, tilt and facet count.
-5. **Leave the ground alone.** A hard-edged rectangle of "gravel" or a lighter
-   patch of "meadow" lying on a flat plane reads as a rendering bug, not as
-   landscaping. Flat grass with one path is better than flat grass with
-   rectangles on it. Ground variation needs real terrain, and that is a
-   different job.
+5. **Ground variation needs terrain, not patches.** A hard-edged rectangle of
+   "gravel" or a lighter patch of "meadow" lying on a flat plane reads as a
+   rendering bug, not as landscaping. Use `kind: "terrain"` — a heightfield with
+   a flattened disc where the building sits — and let the slope colouring do the
+   variation. Flat grass with one path is still better than flat grass with
+   rectangles on it.
 
 ## Making it not look generated
 

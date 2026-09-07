@@ -150,17 +150,30 @@
   },
   "objects": [
     {
-      "id": "ground",
-      "kind": "box",
+      "id": "terrain",
+      "kind": "terrain",
       "size": [
-        70,
-        0.3,
-        70
+        150,
+        150
       ],
-      "position": [
-        0,
-        -0.15,
-        0
+      "segments": 180,
+      "seed": 7,
+      "amplitude": 5.5,
+      "frequency": 0.016,
+      "octaves": 4,
+      "color": "#6b8250",
+      "slopeColor": "#8c8478",
+      "slopeAngle": 27,
+      "flatten": [
+        {
+          "at": [
+            0,
+            1.5
+          ],
+          "radius": 13,
+          "falloff": 13,
+          "height": 0
+        }
       ],
       "material": "grass",
       "castShadow": false

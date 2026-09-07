@@ -109,6 +109,41 @@ A flat array, or nested via `children`, or both. Every entry needs a unique `id`
 | `torus` | `radius`, `tube`, `segments` |
 | `group` | none — a transform node for its children |
 | `light` | `light`: `"point"` (default) or `"spot"`; `color`, `intensity`, `distance`, `decay`; spots also take `angle` (degrees) and `penumbra`. `castShadow: true` to cast |
+| `terrain` | a heightfield — see below |
+
+### Terrain
+
+```json
+{ "id": "terrain", "kind": "terrain",
+  "size": [150, 150], "segments": 180, "seed": 7,
+  "amplitude": 5.5, "frequency": 0.016, "octaves": 4,
+  "color": "#6b8250", "slopeColor": "#8c8478", "slopeAngle": 27,
+  "flatten": [{ "at": [0, 1.5], "radius": 13, "falloff": 13, "height": 0 }],
+  "material": "grass", "castShadow": false }
+```
+
+Seeded value noise, so the same `seed` always gives the same landscape. It is a
+mesh like any other, so **the walk controller finds it by raycast and it is
+walkable for free** — you can climb a hill without doing anything else.
+
+| field | |
+|---|---|
+| `size`, `segments` | extent in metres, and grid resolution. 180 over 150 m is ~0.8 m per quad; past ~250 the triangle count starts to matter more than the detail does |
+| `amplitude` | peak-to-trough height, roughly. 5 is rolling, 20+ is hill country |
+| `frequency` | 0.01–0.02 for landscape scale. Higher gets noisy rather than detailed |
+| `octaves` | 4 is plenty |
+| `seed` | change it to get a different landscape at the same settings |
+| `color`, `slopeColor`, `slopeAngle` | vertex colours blended by slope — ground below the angle, rock above it, over a 16° band. Set `slopeColor` equal to `color` to switch it off |
+| `flatten` | list of `{ at: [x, z], radius, falloff, height }`. Levels a disc so a building has ground to stand on |
+| `material` | still applies for roughness and metalness; its colour is replaced by the slope blend |
+
+**Make `falloff` at least as large as the surrounding relief**, or the flattened
+disc reads as a cookie-cutter mesa with vertical sides — a 9 m falloff in 22 m of
+relief looks like a plinth someone dropped on the landscape. A falloff equal to
+the radius is a good starting point.
+
+Anything you place on terrain has to be placed at the height the terrain
+actually is. Flatten where you build, and put the buildings at that height.
 
 ### Light
 

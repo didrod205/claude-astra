@@ -46,14 +46,17 @@ try {
   for (const e of log.errors) add('error', 'console', String(e.text).slice(0, 200));
 
   // 1. Is there a scene at all?
-  if (meshes.length < 2) add('error', 'empty', `only ${meshes.length} mesh(es) in the scene`);
+  // Zero, not "fewer than two": a scene that is one terrain, or one imported
+  // building, is unusual but not broken. The fault this catches is objects
+  // never being parsed at all.
+  if (!meshes.length) add('error', 'empty', 'no meshes in the scene — nothing was built');
   const diag = Math.hypot(...d.bounds.size);
   if (diag < 0.5) add('error', 'empty', `scene bounding box is ${diag.toFixed(2)} m across — nothing was placed`);
 
   // 2. Degenerate and absurd geometry.
   for (const o of meshes) {
     if (o.empty || o.size.every(v => v === 0)) add('error', 'degenerate', `${o.id} has zero size`);
-    else if (Math.max(...o.size) > 500) add('warn', 'scale', `${o.id} is ${Math.max(...o.size).toFixed(0)} m across`);
+    else if (Math.max(...o.size) > 500 && o.type !== 'terrain') add('warn', 'scale', `${o.id} is ${Math.max(...o.size).toFixed(0)} m across`);
     else if (Math.max(...o.size) < 0.002) add('warn', 'scale', `${o.id} is under 2 mm — invisible at human scale`);
   }
 
@@ -104,11 +107,13 @@ try {
       sy - 1.7 < o.max[1] - 0.05 && sy > o.min[1]);
     if (inside) add('error', 'spawn', `spawn is inside solid "${inside.id}" - the player starts trapped`);
 
-    const under = meshes.filter(o => sx >= o.min[0] && sx <= o.max[0] && sz >= o.min[2] && sz <= o.max[2] && o.max[1] <= sy + 0.1);
-    if (!under.length) add('error', 'spawn', 'no surface under the spawn point - the player falls out of the world');
+    // Ask the walk controller where the ground is, rather than guessing from
+    // bounding boxes - a heightfield's box reaches far above the player.
+    const ground = await cdp.eval(`window.__groundAt ? window.__groundAt(${sx}, ${sz}, ${sy + 2}) : null`);
+    if (ground == null) add('error', 'spawn', 'no surface under the spawn point - the player falls out of the world');
     else {
-      const drop = sy - Math.max(...under.map(o => o.max[1]));
-      if (drop > 2.2) add('warn', 'spawn', `spawn floats ${drop.toFixed(1)} m above the nearest floor`);
+      const drop = sy - ground;
+      if (drop > 2.2) add('warn', 'spawn', `spawn floats ${drop.toFixed(1)} m above the ground`);
       else if (drop < 1.4) add('warn', 'spawn', `spawn eye height is ${drop.toFixed(2)} m - a standing adult is 1.7 m`);
     }
   }

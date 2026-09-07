@@ -150,6 +150,69 @@ function applyWorldUV(geo, scale) {
   return geo;
 }
 
+/* ------------------------------------------------------------- terrain ---
+   A heightfield from seeded value noise, with regions you can flatten so a
+   building has level ground to stand on, and a slope-driven colour blend so
+   steep faces read as rock without needing a texture. The walk controller finds
+   it by raycast like any other mesh, so it is walkable for free.            */
+
+function terrainGeometry(o) {
+  const [w, d] = o.size ?? [120, 120];
+  const seg = Math.max(8, Math.min(o.segments ?? 140, 400));
+  const geo = new THREE.PlaneGeometry(w, d, seg, seg);
+  geo.rotateX(-Math.PI / 2);
+
+  const seed = (o.seed ?? 1) | 0;
+  const hash = (x, z) => {
+    let h = Math.imul(Math.imul(x, 374761393) + Math.imul(z, 668265263) + seed, 1274126177);
+    h = (h ^ (h >>> 13)) >>> 0;
+    return h / 4294967296;
+  };
+  const ease = t => t * t * (3 - 2 * t);
+  const vnoise = (x, z) => {
+    const xi = Math.floor(x), zi = Math.floor(z);
+    const u = ease(x - xi), v = ease(z - zi);
+    const a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), e = hash(xi + 1, zi + 1);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + e * u) * v;
+  };
+
+  const freq0 = o.frequency ?? 0.018, amp0 = o.amplitude ?? 5, oct = o.octaves ?? 4;
+  const flats = o.flatten ?? [];
+  const pos = geo.attributes.position;
+
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    let h = 0, f = freq0, a = amp0;
+    for (let k = 0; k < oct; k++) { h += (vnoise(x * f, z * f) - 0.5) * 2 * a; f *= 2.03; a *= 0.5; }
+    for (const fl of flats) {
+      const [fx, fz] = fl.at ?? [0, 0];
+      const r = fl.radius ?? 10, fo = Math.max(fl.falloff ?? 8, 1e-3);
+      const dist = Math.hypot(x - fx, z - fz);
+      const t = dist <= r ? 1 : dist >= r + fo ? 0 : 1 - ease((dist - r) / fo);
+      h = h * (1 - t) + (fl.height ?? 0) * t;
+    }
+    pos.setY(i, h);
+  }
+  geo.computeVertexNormals();
+
+  // Slope colouring: flat is ground, steep is rock, blended over a few degrees.
+  const flat = new THREE.Color(o.color ?? '#6b8250');
+  const steep = new THREE.Color(o.slopeColor ?? '#8a8378');
+  const lo = Math.cos((o.slopeAngle ?? 30) * D2R);
+  const hi = Math.cos((o.slopeAngle ?? 30) * D2R + 16 * D2R);
+  const nor = geo.attributes.normal;
+  const col = new Float32Array(pos.count * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const up = nor.getY(i);
+    const t = THREE.MathUtils.clamp((lo - up) / Math.max(lo - hi, 1e-4), 0, 1);
+    c.copy(flat).lerp(steep, t);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
+}
+
 /* --------------------------------------------------------- rounded boxes ---
    A perfectly sharp edge is the loudest tell of untouched CAD. Every real edge
    has a small radius that catches a highlight; 1-2 cm is invisible as geometry
@@ -191,6 +254,7 @@ const RAW = {
     o.height ?? 1, o.segments ?? 28),
   cone: o => new THREE.ConeGeometry(o.radius ?? 0.5, o.height ?? 1, o.segments ?? 28),
   torus: o => new THREE.TorusGeometry(o.radius ?? 0.5, o.tube ?? 0.15, 16, o.segments ?? 32),
+  terrain: terrainGeometry,
 };
 
 const GEOM = new Proxy(RAW, {
@@ -341,6 +405,13 @@ function buildScene(manifest, renderer) {
       node = makeLight(o);
     } else if (o.kind === 'group' || !o.kind) {
       node = new THREE.Group();
+    } else if (o.kind === 'terrain') {
+      const m = matFor(o).clone();
+      m.vertexColors = true;
+      m.color.set('#ffffff');          // the slope blend carries the colour
+      node = new THREE.Mesh(GEOM.terrain(o), m);
+      node.castShadow = o.castShadow ?? false;
+      node.receiveShadow = true;
     } else if (GEOM[o.kind]) {
       node = new THREE.Mesh(GEOM[o.kind](o), matFor(o));
       node.castShadow = o.castShadow ?? true;
@@ -593,6 +664,12 @@ async function boot() {
    *  requestAnimationFrame — which a headless or hidden page throttles or pauses
    *  outright. This is how a checker asks "does the ground hold the player up?"
    *  and gets the same answer every time. */
+  /** The exact ground height the walk controller would find, for any geometry.
+   *  A bounding-box guess cannot answer this for a heightfield: a terrain's box
+   *  reaches far above the player, so "is there a surface under the spawn?"
+   *  comes back no while they are standing on a hill. */
+  window.__groundAt = (x, z, from) => ctrl.floorAt(x, z, from ?? 200);
+
   window.__simulate = (sec = 1, dt = 1 / 60) => {
     const n = Math.max(1, Math.round(sec / dt));
     for (let i = 0; i < n; i++) ctrl.step(dt);
