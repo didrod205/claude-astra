@@ -71,7 +71,7 @@ def theme_of(z):
 
 def scan_used(z, patterns):
     """What the document ACTUALLY uses, which is often not what the theme says."""
-    fonts, colors = Counter(), Counter()
+    fonts, colors, sizes = Counter(), Counter(), Counter()
     for n in z.namelist():
         if not any(re.fullmatch(p, n) for p in patterns):
             continue
@@ -88,7 +88,13 @@ def scan_used(z, patterns):
             colors[m.group(1).upper()] += 1
         for m in re.finditer(r'w:color w:val="([0-9A-Fa-f]{6})"', blob):
             colors[m.group(1).upper()] += 1
-    return fonts, colors
+        # docx: w:sz is half-points. drawingml (pptx): sz is hundredths of a point.
+        for m in re.finditer(r'w:sz w:val="(\d+)"', blob):
+            sizes[int(m.group(1)) / 2] += 1
+        # a:rPr on a slide run, a:defRPr in a master/layout list style.
+        for m in re.finditer(r'<a:(?:defR|r)Pr[^>]*\bsz="(\d+)"', blob):
+            sizes[int(m.group(1)) / 100] += 1
+    return fonts, colors, sizes
 
 
 def read_docx(z):
@@ -129,9 +135,10 @@ def read_docx(z):
             if mar is not None:
                 d['margins_in'] = {k: round(int(mar.get(f'{{{NS["w"]}}}{k}', 0)) / TWIP_IN, 2)
                                    for k in ('top', 'right', 'bottom', 'left')}
-    f, c = scan_used(z, [r'word/document\.xml', r'word/header\d*\.xml', r'word/footer\d*\.xml'])
+    f, c, sz = scan_used(z, [r'word/document\.xml', r'word/header\d*\.xml', r'word/footer\d*\.xml'])
     d['fonts_used'] = dict(f.most_common(12))
     d['colors_used'] = dict(c.most_common(16))
+    d['sizes_pt'] = sorted(sz)
     return d
 
 
@@ -157,9 +164,12 @@ def read_pptx(z):
     d['layouts'] = layouts
     d['slide_count'] = sum(1 for x in z.namelist()
                            if re.fullmatch(r'ppt/slides/slide\d+\.xml', x))
-    f, c = scan_used(z, [r'ppt/slides/slide\d+\.xml', r'ppt/slideMasters/slideMaster\d+\.xml'])
+    f, c, sz = scan_used(z, [r'ppt/slides/slide\d+\.xml',
+                             r'ppt/slideMasters/slideMaster\d+\.xml',
+                             r'ppt/slideLayouts/slideLayout\d+\.xml'])
     d['fonts_used'] = dict(f.most_common(12))
     d['colors_used'] = dict(c.most_common(16))
+    d['sizes_pt'] = sorted(sz)
     return d
 
 
@@ -180,7 +190,7 @@ def read_xlsx(z):
     d['sizes_pt'] = sorted(sizes)
     d['sheets'] = [m.group(1) for n in z.namelist()
                    for m in [re.fullmatch(r'xl/worksheets/(sheet\d+)\.xml', n)] if m]
-    _, c = scan_used(z, [r'xl/styles\.xml', r'xl/theme/theme\d+\.xml'])
+    _, c, _sz = scan_used(z, [r'xl/styles\.xml', r'xl/theme/theme\d+\.xml'])
     d['colors_used'] = dict(c.most_common(16))
     return d
 

@@ -34,10 +34,20 @@ When the theme and the used set disagree, **the theme is the intent and the used
 set is the practice.** Follow the theme, and mention the drift if it is large —
 it is often something the user would want to know.
 
-**Sizes** — docx: `w:sz` in named styles (half-points, halved). xlsx:
-`xl/styles.xml` fonts. pdf: the span sizes weighted by how much text is set in
-them. pptx sizes are usually in layouts rather than declared per run, so a deck
-may report no ladder; read the layouts instead.
+**Sizes** — every format declares them somewhere different, and the units differ
+too, which is why they are worth reading rather than assuming:
+
+| | where | unit |
+|---|---|---|
+| docx | `w:sz` on named styles and on runs in the content | half-points |
+| pptx | `a:rPr` on slide runs, `a:defRPr` in the master and layout list styles | hundredths of a point |
+| xlsx | `xl/styles.xml` fonts | points |
+| pdf | span sizes, weighted by how much text is set in each | points |
+
+For a deck, most of the ladder comes from the **master**, not the slides — a
+template with no slides in it still yields the full ladder, because that is where
+PowerPoint keeps it. A slide that sets a size the master never uses is exactly
+what the `size` check is looking for.
 
 **Geometry** — docx `w:sectPr/w:pgSz` and `w:pgMar` in twips (÷1440). pptx
 `p:sldSz` in EMU (÷914400): `13.33 × 7.5` is 16:9, `10 × 7.5` is 4:3. pdf: the
@@ -55,8 +65,8 @@ of contents, and every later restyle.
 
 ## How far to trust it
 
-| high | it came from the theme or an explicit declaration: theme fonts and colours, page and slide size, docx margins, layout names, named styles |
-| medium | scraped fonts and colours — real, but may include one-off pastes |
+| high | it came from the theme or an explicit declaration: theme fonts and colours, page and slide size, docx margins, layout names, named styles, the pptx ladder from a master |
+| medium | scraped fonts, colours and run-level sizes — real, but may include one-off pastes |
 | low | the PDF size ladder on a short document, and `text_inset_in`, which measures where text sits rather than a declared margin |
 
 Nothing here reads the writing. That is `references/voice.md`.
