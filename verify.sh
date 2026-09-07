@@ -82,6 +82,30 @@ expect 0 "a terrain scene audits clean and holds the player up" -- \
 expect 0 "the player can walk across terrain in every direction" -- \
   node walkable-3d/scripts/walk.mjs "$TMP/terrain" --seconds 8
 
+# The first-draft mistakes, caught by the audit rather than by ten iterations.
+mkdir -p "$TMP/firstdraft" && cp walkable-3d/assets/template/index.html walkable-3d/assets/template/runtime.js "$TMP/firstdraft/"
+cat > "$TMP/firstdraft/scene.json" <<'JSON'
+{ "meta": { "name": "firstdraft" }, "spawn": { "position": [0, 1.7, 6], "lookAt": [0, 1.5, 0] },
+  "materials": { "w": { "color": "#ded6c8" }, "f": { "color": "#8a5f3a" },
+                 "glow": { "color": "#fff", "emissive": "#ffd08a", "emissiveIntensity": 3 } },
+  "objects": [
+    { "id": "ground", "kind": "box", "size": [40, 0.3, 40], "position": [0, -0.15, 0], "material": "f" },
+    { "id": "floor", "kind": "box", "size": [6, 0.12, 4], "position": [0, 0.06, 0], "material": "f" },
+    { "id": "wn", "kind": "box", "size": [6, 2.5, 0.15], "position": [0, 1.37, -2], "material": "w", "solid": true },
+    { "id": "we", "kind": "box", "size": [0.15, 2.5, 4], "position": [3, 1.37, 0], "material": "w", "solid": true },
+    { "id": "ww", "kind": "box", "size": [0.15, 2.5, 4], "position": [-3, 1.37, 0], "material": "w", "solid": true },
+    { "id": "ws_l", "kind": "box", "size": [2.5, 2.5, 0.15], "position": [-1.75, 1.37, 2], "material": "w", "solid": true },
+    { "id": "ws_r", "kind": "box", "size": [3.0, 2.5, 0.15], "position": [1.5, 1.37, 2], "material": "w", "solid": true },
+    { "id": "kerb", "kind": "box", "size": [6.4, 0.24, 0.2], "position": [0, 0.12, 2.2], "material": "w", "solid": true },
+    { "id": "bulb", "kind": "sphere", "radius": 0.1, "position": [0, 2.1, 0], "material": "glow" } ] }
+JSON
+node walkable-3d/scripts/audit.mjs "$TMP/firstdraft" >"$TMP/out" 2>&1
+for k in light solid passage; do
+  grep -q "\[$k\]" "$TMP/out" || { bad "first-draft check [$k] did not fire"; sed 's/^/        /' "$TMP/out" | tail -6; break; }
+done
+grep -q '\[light\]' "$TMP/out" && grep -q '\[passage\]' "$TMP/out" && grep -q '\[solid\]' "$TMP/out" \
+  && ok "audit catches a first draft with no lights, solid kerbing and a doorway too narrow to use"
+
 # Standing is not walking. This one exists because the bundled scene once looked
 # right, audited clean, and could not be entered through its own front door.
 node walkable-3d/scripts/walk.mjs walkable-3d/assets/template --seconds 6 --dirs 4 --json >"$TMP/walk.json" 2>/dev/null

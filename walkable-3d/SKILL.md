@@ -70,6 +70,43 @@ all six default angles — they will show you four elevations and a roof while t
 stairs, the furniture and the room layout go unexamined. One cut per storey, just
 under its ceiling: `--plan 2.6 --plan 5.4`.
 
+## Before you write scene.json
+
+Quality is decided here, not in the fixing afterwards. Everything below costs a
+few objects and is the difference between a greybox and something worth walking
+around. The audit now catches the last three, but it is faster to not make them.
+
+**Ground.** `kind: "terrain"` with a `flatten` disc where you build, not a flat
+slab. `falloff` at least the amplitude, or you cut a cookie-cutter mesa.
+
+**Every interior needs a `{ kind: "light" }`.** An emissive material is a bright
+surface that emits nothing; a room without a light object renders as a black box.
+
+**Where two planes meet, put something.** Skirting at the wall/floor line, a
+plinth course around the base outside, corner boards at the corners. The
+junction of two flat surfaces has nothing to catch a shadow, and that — not
+texture — is why a render reads as a box.
+
+**Openings are six objects, not a hole.** Two wall segments, a lintel, a sill, a
+reveal and a glass pane. And a door leaf, opened past 90°: a leaf ajar at 26°
+leaves 12 cm of a 1 m opening, which is plenty to look at and impossible to walk
+through.
+
+**Trim is not solid.** A 26 cm plinth or step marked `solid` is a fence around
+your building. Under 35 cm, leave `solid` off and let the step-up handle it.
+
+**Soft furnishing is layered.** A bed is a headboard, a frame, a mattress, a
+duvet that overhangs, a fold, and two pillows — not three coloured slabs.
+
+**Two lights of different colours.** A warm lamp and a cool window give every
+surface two things to be shaded by. One source of one colour looks like a render.
+
+**Six to ten materials.** Two neutrals, one or two woods, one cool, one accent.
+No detail maps — a shared noise texture reads as burlap on everything and costs
+13 MB in the export.
+
+`references/scale.md` has the numbers behind each of these.
+
 ## Non-negotiables
 
 **1 unit = 1 metre. Always.** Eye height 1.7. Door 0.9 × 2.05. Ceiling 2.4–2.7.
@@ -110,6 +147,9 @@ the usual cause. The ones worth memorising:
 | `spawn` — inside solid / no surface under | not walkable, whatever the screenshots show |
 | `clash` — solids overlapping >25% | furniture inside walls |
 | `empty` / `degenerate` | a `kind` typo silently produced an empty group |
+| `light` | walls but no light object — the interior will be black |
+| `passage` | a gap under 0.7 m between two wall-like slabs — nobody fits through |
+| `solid` | low solid trim, which is a fence you cannot step over |
 
 ## From here into Blender / Unreal / a game
 

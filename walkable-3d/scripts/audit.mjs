@@ -128,6 +128,55 @@ try {
       add('warn', 'spawn', 'the player is still airborne after a second');
   }
 
+  // 7c. The mistakes a first draft makes. Each of these cost an iteration to
+  //     find by hand; none of them is visible in a screenshot.
+  const lights = d.objects.filter(o => o.type === 'light');
+  const enclosing = solids.filter(o => o.size[1] >= 1.8 && Math.max(o.size[0], o.size[2]) >= 2);
+  if (!lights.length && enclosing.length >= 3)
+    add('warn', 'light', 'no light objects, but the scene has walls — an emissive material glows without ' +
+      'emitting, so any interior will render as a black box. Add a { kind: "light" }');
+
+  // Only near the floor: a solid sill at waist height is furniture you bump into,
+  // which is fine. A solid 26 cm course at ankle height is a fence.
+  const floorY = Math.min(...meshes.map(o => o.min[1]));
+  const lowSolids = solids.filter(o => o.size[1] > 0.02 && o.size[1] < 0.35 &&
+                                       Math.max(o.size[0], o.size[2]) > 1.0 &&
+                                       o.min[1] < floorY + 0.6);
+  if (lowSolids.length)
+    add('warn', 'solid', `${lowSolids.length} low solid slab(s) — ${lowSolids.slice(0, 4).map(o => o.id).join(', ')}. ` +
+      'Under 35 cm is trim you step onto; solid, it is a wall you cannot step over');
+
+  // Gaps a person cannot fit through, between things tall and wide enough to be
+  // walls or doors. 0.7 m is the width of the player capsule.
+  const walls = solids.filter(o => o.size[1] >= 1.5 && Math.max(o.size[0], o.size[2]) >= 0.8);
+  const tight = [];
+  for (let i = 0; i < walls.length; i++) {
+    for (let j = i + 1; j < walls.length; j++) {
+      const a2 = walls[i], b2 = walls[j];
+      const yOver = Math.min(a2.max[1], b2.max[1]) - Math.max(a2.min[1], b2.min[1]);
+      if (yOver < 1.0) continue;
+      for (const [ax, other] of [[0, 2], [2, 0]]) {
+        const shared = Math.min(a2.max[other], b2.max[other]) - Math.max(a2.min[other], b2.min[other]);
+        if (shared < 0.1) continue;
+        // Both have to be slabs facing the same way, or this fires on every
+        // bookcase standing 15 cm off a wall — which is a slot, not a doorway.
+        if (a2.size[other] > 0.5 || b2.size[other] > 0.5) continue;
+        const gap = Math.max(a2.min[ax], b2.min[ax]) - Math.min(a2.max[ax], b2.max[ax]);
+        if (gap > 0.05 && gap < 0.75) tight.push({ a: a2.id, b: b2.id, gap: gap.toFixed(2) });
+      }
+    }
+  }
+  if (tight.length)
+    add('warn', 'passage', `${tight.length} gap(s) too narrow to walk through: ` +
+      tight.slice(0, 4).map(t => `${t.a}/${t.b} ${t.gap} m`).join(', ') +
+      ' — a person needs 0.7 m. Run walk.mjs to see whether it matters');
+
+  const mats = new Set();
+  for (const o of d.objects) if (o.material) mats.add(o.material);
+  if (d.materialCount > 26)
+    add('warn', 'palette', `${d.materialCount} materials — a coherent scene is usually under 20. ` +
+      'Two neutrals, one or two woods, one cool, one accent');
+
   // 8. Budget.
   if (d.render.calls > 900) add('warn', 'perf', `${d.render.calls} draw calls - merge or instance repeated props`);
   if (d.render.triangles > 3000000) add('warn', 'perf', `${(d.render.triangles / 1e6).toFixed(1)}M triangles`);

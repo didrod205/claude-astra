@@ -59,7 +59,7 @@ whether bullets end in a full stop, how long a heading runs.
 
 ## Verified
 
-`./verify.sh` reproduces every claim below. 26 checks, no arguments, no setup —
+`./verify.sh` reproduces every claim below. 27 checks, no arguments, no setup —
 it builds its own fixtures in a temp directory and cleans up after itself.
 
 ```
@@ -71,6 +71,7 @@ walkable-3d
   ok    a terrain scene audits clean and holds the player up
   ok    the player can walk across terrain in every direction
   ok    the player can walk in through the front door
+  ok    audit catches a first draft with no lights, solid kerbing and a doorway too narrow to use
   ok    --plan cuts through the roof for an interior view
   ok    glTF export keeps object names and parenting
 playable-prototype
@@ -211,6 +212,12 @@ audit - townhouse
 You get `scene/` (three files), six angles plus a cutaway plan per storey in
 `shots/`, and a `.glb` whose objects keep the names you gave them — `w_g_s_l`,
 `step_07`, `balc_rail_n` — so a person can open it in Blender and move the bed.
+
+**The audit knows what a first draft gets wrong.** Walls but no light object
+(the interior will render black), trim marked solid (a 26 cm fence around your
+own building), a gap between two wall slabs under 0.7 m (nobody fits through) —
+each of those cost an iteration to find by hand, and each is now reported before
+you render anything.
 
 **Standing is not walking.** `walk.mjs` holds W in eight directions and reports
 how far the player got, how much they climbed, and whether they ever ended up
@@ -413,7 +420,7 @@ exposed — typing into its search field filtered a table the tree never describ
 ## Try it without asking Claude
 
 ```bash
-./verify.sh                                                   # all 26 checks, ~5 min
+./verify.sh                                                   # all 27 checks, ~7 min
 node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
 open playable-prototype/assets/template/game.html
 ```

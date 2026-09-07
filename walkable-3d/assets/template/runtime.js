@@ -813,6 +813,7 @@ async function boot() {
       objects: objs,
       bounds: window.__bounds(),
       spawn: manifest.spawn ?? null,
+      materialCount: Object.keys(manifest.materials ?? {}).length,
       render: { calls: stats.calls, triangles: stats.triangles, geometries: stats.geometries, textures: stats.textures },
     };
   };

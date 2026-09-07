@@ -3,7 +3,7 @@
 // move — that the ground carries them uphill and down, that they do not drop
 // through it, and that they are not fenced in where they should not be.
 //
-//   node scripts/walk.mjs <sceneDir> [--seconds 8] [--dirs 8] [--json]
+//   node scripts/walk.mjs <sceneDir> [--seconds 8] [--dirs 8] [--from x,y,z] [--json]
 //
 // Exit 0 clean · 1 warnings · 2 the scene is not walkable.
 
@@ -11,7 +11,7 @@ import { resolve, basename } from 'node:path';
 import { serve, launchChrome, CDP, instrument, goto } from './lib.mjs';
 
 const argv = process.argv.slice(2);
-const VALUED = new Set(['seconds', 'dirs']);
+const VALUED = new Set(['seconds', 'dirs', 'from']);
 const flag = (n, d) => { const i = argv.indexOf(`--${n}`); return i < 0 ? d : argv[i + 1]; };
 const dir = resolve(argv.find((a, i) => {
   const p = argv[i - 1];
@@ -20,6 +20,10 @@ const dir = resolve(argv.find((a, i) => {
 const SEC = +flag('seconds', 8);
 const DIRS = Math.max(1, +flag('dirs', 8));
 const asJson = argv.includes('--json');
+// Walk from somewhere other than the spawn — an interior needs testing from
+// inside it, and the spawn is usually at the front door or on the path.
+const FROM = flag('from', null);
+const from = FROM ? FROM.split(',').map(Number) : null;
 
 const server = await serve(dir);
 const chrome = await launchChrome();
@@ -43,7 +47,8 @@ try {
     for (let i = 0; i < DIRS; i++) {
       const yaw = (i / DIRS) * Math.PI * 2;
       const r = JSON.parse(await cdp.eval(
-        `JSON.stringify(window.__walk(${yaw}, ${SEC}))`, { timeout: 180000 }));
+        `JSON.stringify(window.__walk(${yaw}, ${SEC}, 1/60, ${from ? JSON.stringify(from) : 'null'}))`,
+        { timeout: 180000 }));
       runs.push({ heading: Math.round((yaw * 180) / Math.PI), ...r });
     }
     for (const e of log.errors) add('error', 'console', String(e.text).slice(0, 200));
@@ -80,7 +85,8 @@ const errs = problems.filter(p => p.level === 'error');
 const warns = problems.filter(p => p.level === 'warn');
 if (asJson) console.log(JSON.stringify({ ok: !errs.length, problems, runs }, null, 2));
 else {
-  console.log(`\nwalk — ${basename(dir)} · ${DIRS} directions · ${SEC}s each\n`);
+  console.log(`\nwalk — ${basename(dir)} · ${DIRS} directions · ${SEC}s each` +
+              `${from ? ` · from ${from.join(', ')}` : ''}\n`);
   for (const r of runs) {
     console.log(`  ${String(r.heading).padStart(3)}°  ${String(r.distance).padStart(6)} m   ` +
       `climb ${String(r.climb).padStart(5)} m   end y ${String(r.endY).padStart(6)}   ` +
