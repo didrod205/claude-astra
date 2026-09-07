@@ -30,8 +30,18 @@ try {
     report(); process.exit(2);
   }
 
+  // Run the walk simulation deterministically — not on wall-clock, which a
+  // headless page throttles — and check the player is still where they were
+  // put. A scene can be structurally perfect and still not hold anyone up.
+  const stand = await cdp.eval(`(() => {
+    const sp = window.__three.manifest.spawn;
+    if (!window.__simulate || !sp) return null;
+    const r = window.__simulate(1.0);
+    return JSON.stringify({ ...r, spawnY: sp.position[1] });
+  })()`).then(v => (v ? JSON.parse(v) : null));
+
   const d = await cdp.eval(`JSON.stringify(window.__auditData())`).then(JSON.parse);
-  const meshes = d.objects.filter(o => o.type !== 'group');
+  const meshes = d.objects.filter(o => o.type !== 'group' && o.type !== 'light');
 
   for (const e of log.errors) add('error', 'console', String(e.text).slice(0, 200));
 
@@ -101,6 +111,16 @@ try {
       if (drop > 2.2) add('warn', 'spawn', `spawn floats ${drop.toFixed(1)} m above the nearest floor`);
       else if (drop < 1.4) add('warn', 'spawn', `spawn eye height is ${drop.toFixed(2)} m - a standing adult is 1.7 m`);
     }
+  }
+
+  // 7b. Is the player still standing where they were put, half a second in?
+  if (stand) {
+    const drift = stand.y - stand.spawnY;
+    if (!isFinite(stand.y) || Math.abs(drift) > 1.0)
+      add('error', 'spawn', `after 1 s of walking the player is at y=${stand.y.toFixed(2)}, ` +
+        `${Math.abs(drift).toFixed(1)} m from the spawn height — they are falling or being launched, not standing`);
+    else if (!stand.onGround)
+      add('warn', 'spawn', 'the player is still airborne after a second');
   }
 
   // 8. Budget.

@@ -52,13 +52,14 @@ the layout names, and diffs the finished file back against them.
 
 ## Verified
 
-`./verify.sh` reproduces every claim below. 17 checks, no arguments, no setup —
+`./verify.sh` reproduces every claim below. 18 checks, no arguments, no setup —
 it builds its own fixtures in a temp directory and cleans up after itself.
 
 ```
 walkable-3d
   ok    audit passes on the bundled scene
   ok    audit fails a scene with the player trapped in geometry
+  ok    audit fails a scene that does not hold the player up
   ok    shot.mjs renders a frame headlessly
   ok    --plan cuts through the roof for an interior view
   ok    glTF export keeps object names and parenting
@@ -205,7 +206,8 @@ You get `scene/` (three files), six angles plus a cutaway plan per storey in
 all six default angles — this is what the six show you instead:
 
 <p align="center">
-  <img src="media/townhouse-exterior.png" width="760" alt="Exterior three-quarter view of the same townhouse: brick walls, flat roof, doorway, path and trees">
+  <img src="media/cabin-interior.png" width="820" alt="Interior of the bundled cabin: a lamp lighting a table and floor, a window looking onto grass, a bed with contact shadow, darkened corners">
+  <br><em>The bundled example scene from inside. Image-based sky light, ambient occlusion in the corners, and a lamp that is an actual light rather than a glowing sphere.</em>
 </p>
 
 ### playable-prototype
@@ -332,7 +334,7 @@ Calculator and TextEdit sessions, in
 ## Try it without asking Claude
 
 ```bash
-./verify.sh                                                   # all 17 checks, ~3 min
+./verify.sh                                                   # all 18 checks, ~4 min
 node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
 open playable-prototype/assets/template/game.html
 ```

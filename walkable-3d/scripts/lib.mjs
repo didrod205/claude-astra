@@ -46,7 +46,11 @@ async function findChrome() {
   throw new Error('Chrome not found. Set CHROME_BIN to a Chrome/Chromium binary.');
 }
 
-export async function launchChrome({ headless = true, port = 9333 } = {}) {
+// A fixed debug port makes two runs collide, and worse, makes a run silently
+// attach to a stale browser left behind by an earlier one. Pick a free port.
+function freePort() { return 9200 + Math.floor(Math.random() * 700); }
+
+export async function launchChrome({ headless = true, port = freePort() } = {}) {
   const bin = await findChrome();
   const dir = await mkdtemp(join(tmpdir(), 'w3d-'));
   const args = [

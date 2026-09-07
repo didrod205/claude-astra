@@ -49,6 +49,18 @@ expect 2 "audit fails a scene with the player trapped in geometry" -- \
 node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn >/dev/null 2>&1
 [ -s "$TMP/shots/spawn.png" ] && ok "shot.mjs renders a frame headlessly" || bad "shot.mjs produced no image"
 
+# A scene can be structurally perfect and still not hold the player up.
+mkdir -p "$TMP/falling" && cp walkable-3d/assets/template/index.html walkable-3d/assets/template/runtime.js "$TMP/falling/"
+cat > "$TMP/falling/scene.json" <<'JSON'
+{ "meta": { "name": "falling" }, "spawn": { "position": [0, 34, 0], "lookAt": [0, 0, -4] },
+  "materials": { "g": { "color": "#6f8455" } },
+  "objects": [
+    { "id":"ground","kind":"box","size":[40,0.4,40],"position":[0,-0.2,0],"material":"g" },
+    { "id":"post","kind":"box","size":[0.4,2,0.4],"position":[3,1,-3],"material":"g","solid":true } ] }
+JSON
+expect 2 "audit fails a scene that does not hold the player up" -- \
+  node walkable-3d/scripts/audit.mjs "$TMP/falling"
+
 node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn --plan 1.5 >/dev/null 2>&1
 [ -s "$TMP/shots/plan-1_5.png" ] && ok "--plan cuts through the roof for an interior view" || bad "--plan produced no image"
 

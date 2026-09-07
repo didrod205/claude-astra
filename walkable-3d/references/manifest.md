@@ -37,11 +37,17 @@ so the horizon sits high and you see the ground.
 | `sunPosition` | `[12,20,8]` | direction of the key light |
 | `sunIntensity` | `2.2` | |
 | `fog` | none | `[near, far]` in metres. Adds depth outdoors; skip indoors |
-| `shadowExtent` | `30` | half-width of the shadow camera. Must cover the built area or shadows clip |
-| `exposure` | `1.0` | ACES tone-mapping exposure |
+| `shadowExtent` | *auto* | half-width of the shadow camera. **Leave it unset** — it is fitted to what you actually built, ignoring terrain slabs, and a hand-set value is nearly always far too generous. Every wasted metre costs resolution where the geometry is |
+| `exposure` | `0.95` | ACES tone-mapping exposure |
+| `envIntensity` | `0.5` | image-based light from the sky. Past ~0.6 it washes the albedo out until everything reads as the same pale grey |
+| `ao` | `true` | ambient occlusion. The contact darkening that makes objects sit *in* the scene rather than on top of it |
+| `aoRadius` | `1.5` | **in metres.** The library default is tuned for props; at room and building scale it produces nothing visible |
+| `aoScale` | `1.6` | AO strength |
+| `shadowMap` | `4096` | shadow map resolution |
+| `shadowBias`, `normalBias` | `-0.0016`, `0.035` | only touch these if you see banding. `normalBias` must stay well under your thinnest wall — it offsets the shadow sample along the surface normal, and half a wall's thickness pushes it out the other side |
 
-`shadowExtent` is the one people get wrong: leave it at 30 on a 200 m city block
-and every shadow past 30 m vanishes. Set it to roughly your scene radius.
+The three that actually change how a scene reads are `envIntensity`, `aoRadius`
+and `sunIntensity`. Everything else is trim.
 
 ## materials
 
@@ -86,6 +92,8 @@ A flat array, or nested via `children`, or both. Every entry needs a unique `id`
 | `solid` | `true` = blocks the player. Default `false` |
 | `visible` | `false` keeps it in the export but hides it |
 | `castShadow` / `receiveShadow` | both default `true` |
+| `bevel` | edge radius in metres. Defaults to ~1.8 cm, capped at 14% of the smallest dimension. A perfectly sharp edge is the loudest tell of untouched CAD; set `0` only when you want that |
+| `vary` | `false` turns off the ±4% per-object shade variation |
 | `tag` / `userData` | free-form, carried into the export |
 
 ### Per-kind geometry
@@ -99,6 +107,24 @@ A flat array, or nested via `children`, or both. Every entry needs a unique `id`
 | `cone` | `radius`, `height`, `segments` |
 | `torus` | `radius`, `tube`, `segments` |
 | `group` | none — a transform node for its children |
+| `light` | `light`: `"point"` (default) or `"spot"`; `color`, `intensity`, `distance`, `decay`; spots also take `angle` (degrees) and `penumbra`. `castShadow: true` to cast |
+
+### Light
+
+An emissive material **does not emit light** — it is a bright surface, nothing
+more. A lamp that lights its room is two objects: the glowing sphere and a light
+inside it.
+
+```json
+{ "id": "lamp_bulb",  "kind": "sphere", "radius": 0.075,
+  "position": [0.46, 1.08, 0], "material": "glow", "castShadow": false },
+{ "id": "lamp_light", "kind": "light", "light": "point",
+  "position": [0.46, 1.08, 0], "color": "#ffcf94", "intensity": 7, "distance": 8.5 }
+```
+
+Interiors need this. The sun cannot reach through a doorway, so a room with no
+light object renders as a black box no matter how well it is built — and that is
+one of the few faults neither the audit nor an exterior screenshot will show you.
 
 **`position` is the centre, not the base.** A 2.6 m wall standing on a floor
 whose top is at y = 0.12 has `position[1] = 0.12 + 1.3 = 1.42`. Getting this

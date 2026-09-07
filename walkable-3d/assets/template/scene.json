@@ -1,81 +1,1558 @@
 {
-  "meta": { "name": "cabin", "units": "metres", "up": "Y" },
-  "fov": 68,
-  "spawn": { "position": [0, 1.7, 8], "lookAt": [0, 1.6, 0] },
+  "meta": {
+    "name": "cabin",
+    "units": "metres",
+    "up": "Y"
+  },
+  "fov": 66,
+  "spawn": {
+    "position": [
+      0,
+      1.72,
+      7.6
+    ],
+    "lookAt": [
+      0,
+      1.45,
+      0
+    ]
+  },
   "environment": {
-    "skyColor": "#a8c4e0", "groundColor": "#5c6b4a", "ambient": 0.6,
-    "sunPosition": [14, 22, 10], "sunIntensity": 2.4, "fog": [8, 90], "shadowExtent": 26
+    "skyColor": "#8fb4d8",
+    "groundColor": "#5b6a45",
+    "envIntensity": 0.5,
+    "ambient": 0.5,
+    "sunPosition": [
+      15,
+      17,
+      11
+    ],
+    "sunIntensity": 2.1,
+    "fog": [
+      14,
+      120
+    ],
+    "exposure": 0.95,
+    "aoRadius": 1.5,
+    "aoScale": 1.7
   },
   "materials": {
-    "grass":  { "color": "#6f8455", "roughness": 1.0 },
-    "plank":  { "color": "#9c6b41", "roughness": 0.75 },
-    "wall":   { "color": "#d9cfbe", "roughness": 0.9 },
-    "roof":   { "color": "#4a3a33", "roughness": 0.8 },
-    "stone":  { "color": "#8d8a84", "roughness": 0.95 },
-    "fabric": { "color": "#7a4b52", "roughness": 1.0 },
-    "metal":  { "color": "#b8bcc2", "roughness": 0.35, "metalness": 0.85 },
-    "bark":   { "color": "#5b4636", "roughness": 1.0 },
-    "leaf":   { "color": "#41633a", "roughness": 1.0 },
-    "glow":   { "color": "#fff0cf", "emissive": "#ffd591", "emissiveIntensity": 2.2, "roughness": 0.4 }
+    "grass": {
+      "color": "#67804f",
+      "roughness": 1.0
+    },
+    "stone": {
+      "color": "#8e8b83",
+      "roughness": 0.92
+    },
+    "plaster": {
+      "color": "#d8cdb8",
+      "roughness": 0.95
+    },
+    "brick": {
+      "color": "#9c6f5a",
+      "roughness": 0.9
+    },
+    "trim": {
+      "color": "#6b5340",
+      "roughness": 0.7
+    },
+    "roof": {
+      "color": "#3b3129",
+      "roughness": 0.85
+    },
+    "plank": {
+      "color": "#9c6f45",
+      "roughness": 0.72
+    },
+    "oak": {
+      "color": "#8a5f3a",
+      "roughness": 0.6
+    },
+    "linen": {
+      "color": "#e2ddd2",
+      "roughness": 0.95
+    },
+    "wool": {
+      "color": "#7c4a4f",
+      "roughness": 1.0
+    },
+    "books": {
+      "color": "#4a6172",
+      "roughness": 0.85
+    },
+    "brass": {
+      "color": "#b99358",
+      "roughness": 0.32,
+      "metalness": 0.9
+    },
+    "glass": {
+      "color": "#cfe2ee",
+      "roughness": 0.06,
+      "metalness": 0.0,
+      "opacity": 0.28
+    },
+    "bark": {
+      "color": "#4f3d2c",
+      "roughness": 1.0
+    },
+    "leaf": {
+      "color": "#39562f",
+      "roughness": 1.0
+    },
+    "leafhi": {
+      "color": "#476a38",
+      "roughness": 1.0
+    },
+    "glow": {
+      "color": "#fff2da",
+      "emissive": "#ffcf94",
+      "emissiveIntensity": 3.0,
+      "roughness": 0.4
+    }
   },
   "objects": [
-    { "id": "ground",   "kind": "box", "size": [60, 0.2, 60], "position": [0, -0.1, 0], "material": "grass", "castShadow": false },
-    { "id": "path",     "kind": "box", "size": [1.6, 0.04, 6.4], "position": [0, 0.02, 5.3], "material": "stone", "castShadow": false },
-
-    { "id": "cabin", "kind": "group", "position": [0, 0, 0], "children": [
-      { "id": "floor",   "kind": "box", "size": [6.3, 0.12, 4.3], "position": [0, 0.06, 0], "material": "plank" },
-      { "id": "wall_n",  "kind": "box", "size": [6.3, 2.6, 0.16], "position": [0, 1.42, -2.07], "material": "wall", "solid": true },
-      { "id": "wall_w",  "kind": "box", "size": [0.16, 2.6, 4.3], "position": [-3.07, 1.42, 0], "material": "wall", "solid": true },
-      { "id": "wall_e",  "kind": "box", "size": [0.16, 2.6, 4.3], "position": [3.07, 1.42, 0], "material": "wall", "solid": true },
-      { "id": "wall_s_l","kind": "box", "size": [2.55, 2.6, 0.16], "position": [-1.87, 1.42, 2.07], "material": "wall", "solid": true },
-      { "id": "wall_s_r","kind": "box", "size": [2.55, 2.6, 0.16], "position": [1.87, 1.42, 2.07], "material": "wall", "solid": true },
-      { "id": "lintel",  "kind": "box", "size": [1.2, 0.5, 0.16], "position": [0, 2.47, 2.07], "material": "wall", "solid": true },
-      { "id": "roof",    "kind": "box", "size": [6.9, 0.18, 4.9], "position": [0, 2.81, 0], "material": "roof", "solid": true },
-      { "id": "chimney", "kind": "box", "size": [0.5, 1.1, 0.5], "position": [2.0, 3.45, -1.2], "material": "stone", "solid": true }
-    ]},
-
-    { "id": "table", "kind": "group", "position": [-1.3, 0.12, -0.6], "children": [
-      { "id": "table_top", "kind": "box", "size": [1.4, 0.06, 0.85], "position": [0, 0.73, 0], "material": "plank", "solid": true },
-      { "id": "leg_a", "kind": "cylinder", "radius": 0.04, "height": 0.7, "position": [-0.62, 0.35, -0.35], "material": "plank" },
-      { "id": "leg_b", "kind": "cylinder", "radius": 0.04, "height": 0.7, "position": [ 0.62, 0.35, -0.35], "material": "plank" },
-      { "id": "leg_c", "kind": "cylinder", "radius": 0.04, "height": 0.7, "position": [-0.62, 0.35,  0.35], "material": "plank" },
-      { "id": "leg_d", "kind": "cylinder", "radius": 0.04, "height": 0.7, "position": [ 0.62, 0.35,  0.35], "material": "plank" },
-      { "id": "lamp_base", "kind": "cylinder", "radius": 0.09, "height": 0.03, "position": [0.5, 0.78, 0], "material": "metal" },
-      { "id": "lamp_stem", "kind": "cylinder", "radius": 0.015, "height": 0.28, "position": [0.5, 0.93, 0], "material": "metal" },
-      { "id": "lamp_bulb", "kind": "sphere", "radius": 0.08, "position": [0.5, 1.12, 0], "material": "glow", "castShadow": false }
-    ]},
-
-    { "id": "chair", "kind": "group", "position": [-1.3, 0.12, 0.35], "rotation": [0, 180, 0], "children": [
-      { "id": "chair_seat", "kind": "box", "size": [0.44, 0.05, 0.44], "position": [0, 0.45, 0], "material": "plank", "solid": true },
-      { "id": "chair_back", "kind": "box", "size": [0.44, 0.5, 0.05], "position": [0, 0.72, -0.2], "material": "plank" },
-      { "id": "chair_leg_a", "kind": "cylinder", "radius": 0.025, "height": 0.45, "position": [-0.18, 0.22, -0.18], "material": "plank" },
-      { "id": "chair_leg_b", "kind": "cylinder", "radius": 0.025, "height": 0.45, "position": [ 0.18, 0.22, -0.18], "material": "plank" },
-      { "id": "chair_leg_c", "kind": "cylinder", "radius": 0.025, "height": 0.45, "position": [-0.18, 0.22,  0.18], "material": "plank" },
-      { "id": "chair_leg_d", "kind": "cylinder", "radius": 0.025, "height": 0.45, "position": [ 0.18, 0.22,  0.18], "material": "plank" }
-    ]},
-
-    { "id": "bed", "kind": "group", "position": [1.9, 0.12, -0.7], "children": [
-      { "id": "bed_frame", "kind": "box", "size": [1.3, 0.32, 2.0], "position": [0, 0.16, 0], "material": "plank", "solid": true },
-      { "id": "mattress",  "kind": "box", "size": [1.24, 0.2, 1.94], "position": [0, 0.42, 0], "material": "fabric" },
-      { "id": "pillow",    "kind": "box", "size": [0.9, 0.14, 0.4], "position": [0, 0.59, -0.72], "material": "wall" }
-    ]},
-
-    { "id": "rug", "kind": "box", "size": [2.2, 0.02, 1.5], "position": [-0.6, 0.13, 1.0], "material": "fabric", "castShadow": false },
-
-    { "id": "tree_1", "kind": "group", "position": [-6.5, 0, 3.0], "children": [
-      { "id": "trunk_1", "kind": "cylinder", "radiusTop": 0.16, "radiusBottom": 0.24, "height": 2.6, "position": [0, 1.3, 0], "material": "bark", "solid": true },
-      { "id": "crown_1", "kind": "cone", "radius": 1.5, "height": 3.4, "position": [0, 3.9, 0], "material": "leaf" }
-    ]},
-    { "id": "tree_2", "kind": "group", "position": [6.8, 0, 1.4], "scale": 1.25, "children": [
-      { "id": "trunk_2", "kind": "cylinder", "radiusTop": 0.16, "radiusBottom": 0.24, "height": 2.6, "position": [0, 1.3, 0], "material": "bark", "solid": true },
-      { "id": "crown_2", "kind": "cone", "radius": 1.5, "height": 3.4, "position": [0, 3.9, 0], "material": "leaf" }
-    ]},
-    { "id": "tree_3", "kind": "group", "position": [-5.2, 0, -4.6], "scale": 0.85, "children": [
-      { "id": "trunk_3", "kind": "cylinder", "radiusTop": 0.16, "radiusBottom": 0.24, "height": 2.6, "position": [0, 1.3, 0], "material": "bark", "solid": true },
-      { "id": "crown_3", "kind": "cone", "radius": 1.5, "height": 3.4, "position": [0, 3.9, 0], "material": "leaf" }
-    ]},
-
-    { "id": "rock_1", "kind": "sphere", "radius": 0.42, "position": [2.6, 0.18, 5.4], "scale": [1, 0.6, 1.2], "material": "stone", "solid": true },
-    { "id": "rock_2", "kind": "sphere", "radius": 0.26, "position": [-2.2, 0.1, 4.4], "scale": [1, 0.65, 1], "material": "stone", "solid": true }
+    {
+      "id": "ground",
+      "kind": "box",
+      "size": [
+        70,
+        0.3,
+        70
+      ],
+      "position": [
+        0,
+        -0.15,
+        0
+      ],
+      "material": "grass",
+      "castShadow": false
+    },
+    {
+      "id": "path",
+      "kind": "box",
+      "size": [
+        1.5,
+        0.05,
+        6.2
+      ],
+      "position": [
+        0,
+        0.025,
+        5.4
+      ],
+      "material": "stone",
+      "castShadow": false
+    },
+    {
+      "id": "step",
+      "kind": "box",
+      "size": [
+        1.6,
+        0.14,
+        0.7
+      ],
+      "position": [
+        0,
+        0.07,
+        2.55
+      ],
+      "material": "stone"
+    },
+    {
+      "id": "cabin",
+      "kind": "group",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "children": [
+        {
+          "id": "floor",
+          "kind": "box",
+          "size": [
+            6.16,
+            0.12,
+            4.16
+          ],
+          "position": [
+            0,
+            0.06,
+            0
+          ],
+          "material": "plank"
+        },
+        {
+          "id": "w_s_seg0",
+          "kind": "box",
+          "size": [
+            1.48,
+            2.55,
+            0.16
+          ],
+          "position": [
+            -2.34,
+            1.395,
+            2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_s_seg1",
+          "kind": "box",
+          "size": [
+            1.4500000000000002,
+            2.55,
+            0.16
+          ],
+          "position": [
+            0.12499999999999994,
+            1.395,
+            2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_s_seg2",
+          "kind": "box",
+          "size": [
+            0.9300000000000002,
+            2.55,
+            0.16
+          ],
+          "position": [
+            2.615,
+            1.395,
+            2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_s_lintel0",
+          "kind": "box",
+          "size": [
+            1.0,
+            0.46999999999999975,
+            0.16
+          ],
+          "position": [
+            -1.1,
+            2.435,
+            2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_s_lintel1",
+          "kind": "box",
+          "size": [
+            1.3,
+            0.3999999999999999,
+            0.16
+          ],
+          "position": [
+            1.5,
+            2.4699999999999998,
+            2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_s_sill1",
+          "kind": "box",
+          "size": [
+            1.3,
+            0.9,
+            0.16
+          ],
+          "position": [
+            1.5,
+            0.5700000000000001,
+            2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_s_glass1",
+          "kind": "box",
+          "size": [
+            1.24,
+            1.19,
+            0.02
+          ],
+          "position": [
+            1.5,
+            1.645,
+            2.08
+          ],
+          "material": "glass",
+          "castShadow": false
+        },
+        {
+          "id": "w_s_frame10",
+          "kind": "box",
+          "size": [
+            1.3,
+            0.05,
+            0.18
+          ],
+          "position": [
+            1.5,
+            2.245,
+            2.08
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_s_frame11",
+          "kind": "box",
+          "size": [
+            1.3,
+            0.05,
+            0.18
+          ],
+          "position": [
+            1.5,
+            1.045,
+            2.08
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_s_frame12",
+          "kind": "box",
+          "size": [
+            0.05,
+            1.25,
+            0.18
+          ],
+          "position": [
+            0.875,
+            1.645,
+            2.08
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_s_frame13",
+          "kind": "box",
+          "size": [
+            0.05,
+            1.25,
+            0.18
+          ],
+          "position": [
+            2.125,
+            1.645,
+            2.08
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_n_seg0",
+          "kind": "box",
+          "size": [
+            2.93,
+            2.55,
+            0.16
+          ],
+          "position": [
+            -1.615,
+            1.395,
+            -2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_n_seg1",
+          "kind": "box",
+          "size": [
+            1.73,
+            2.55,
+            0.16
+          ],
+          "position": [
+            2.215,
+            1.395,
+            -2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_n_lintel0",
+          "kind": "box",
+          "size": [
+            1.5,
+            0.3999999999999999,
+            0.16
+          ],
+          "position": [
+            0.6,
+            2.4699999999999998,
+            -2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_n_sill0",
+          "kind": "box",
+          "size": [
+            1.5,
+            0.9,
+            0.16
+          ],
+          "position": [
+            0.6,
+            0.5700000000000001,
+            -2.08
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_n_glass0",
+          "kind": "box",
+          "size": [
+            1.44,
+            1.19,
+            0.02
+          ],
+          "position": [
+            0.6,
+            1.645,
+            -2.08
+          ],
+          "material": "glass",
+          "castShadow": false
+        },
+        {
+          "id": "w_n_frame00",
+          "kind": "box",
+          "size": [
+            1.5,
+            0.05,
+            0.18
+          ],
+          "position": [
+            0.6,
+            2.245,
+            -2.08
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_n_frame01",
+          "kind": "box",
+          "size": [
+            1.5,
+            0.05,
+            0.18
+          ],
+          "position": [
+            0.6,
+            1.045,
+            -2.08
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_n_frame02",
+          "kind": "box",
+          "size": [
+            0.05,
+            1.25,
+            0.18
+          ],
+          "position": [
+            -0.125,
+            1.645,
+            -2.08
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_n_frame03",
+          "kind": "box",
+          "size": [
+            0.05,
+            1.25,
+            0.18
+          ],
+          "position": [
+            1.325,
+            1.645,
+            -2.08
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_w_seg0",
+          "kind": "box",
+          "size": [
+            0.16,
+            2.55,
+            1.0
+          ],
+          "position": [
+            -3.08,
+            1.395,
+            -1.5
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_w_seg1",
+          "kind": "box",
+          "size": [
+            0.16,
+            2.55,
+            1.8
+          ],
+          "position": [
+            -3.08,
+            1.395,
+            1.1
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_w_lintel0",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.3999999999999999,
+            1.2
+          ],
+          "position": [
+            -3.08,
+            2.4699999999999998,
+            -0.4
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_w_sill0",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.9,
+            1.2
+          ],
+          "position": [
+            -3.08,
+            0.5700000000000001,
+            -0.4
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "w_w_glass0",
+          "kind": "box",
+          "size": [
+            0.02,
+            1.19,
+            1.14
+          ],
+          "position": [
+            -3.08,
+            1.645,
+            -0.4
+          ],
+          "material": "glass",
+          "castShadow": false
+        },
+        {
+          "id": "w_w_frame00",
+          "kind": "box",
+          "size": [
+            0.18,
+            0.05,
+            1.2
+          ],
+          "position": [
+            -3.08,
+            2.245,
+            -0.4
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_w_frame01",
+          "kind": "box",
+          "size": [
+            0.18,
+            0.05,
+            1.2
+          ],
+          "position": [
+            -3.08,
+            1.045,
+            -0.4
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_w_frame02",
+          "kind": "box",
+          "size": [
+            0.18,
+            1.25,
+            0.05
+          ],
+          "position": [
+            -3.08,
+            1.645,
+            -0.975
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_w_frame03",
+          "kind": "box",
+          "size": [
+            0.18,
+            1.25,
+            0.05
+          ],
+          "position": [
+            -3.08,
+            1.645,
+            0.17499999999999993
+          ],
+          "material": "trim"
+        },
+        {
+          "id": "w_e_seg0",
+          "kind": "box",
+          "size": [
+            0.16,
+            2.55,
+            4.0
+          ],
+          "position": [
+            3.08,
+            1.395,
+            0.0
+          ],
+          "material": "plaster",
+          "solid": true
+        },
+        {
+          "id": "fascia",
+          "kind": "box",
+          "size": [
+            6.86,
+            0.22,
+            4.86
+          ],
+          "position": [
+            0,
+            2.78,
+            0
+          ],
+          "material": "trim",
+          "solid": true
+        },
+        {
+          "id": "roof",
+          "kind": "box",
+          "size": [
+            6.66,
+            0.12,
+            4.66
+          ],
+          "position": [
+            0,
+            2.95,
+            0
+          ],
+          "material": "roof",
+          "solid": true
+        },
+        {
+          "id": "chimney",
+          "kind": "box",
+          "size": [
+            0.46,
+            1.0,
+            0.46
+          ],
+          "position": [
+            2.0,
+            3.4699999999999998,
+            -1.2
+          ],
+          "material": "brick",
+          "solid": true
+        },
+        {
+          "id": "chimney_cap",
+          "kind": "box",
+          "size": [
+            0.6,
+            0.09,
+            0.6
+          ],
+          "position": [
+            2.0,
+            4.01,
+            -1.2
+          ],
+          "material": "stone"
+        }
+      ]
+    },
+    {
+      "id": "table",
+      "kind": "group",
+      "position": [
+        -1.5,
+        0.12,
+        -0.5
+      ],
+      "rotation": [
+        0,
+        6,
+        0
+      ],
+      "children": [
+        {
+          "id": "table_top",
+          "kind": "box",
+          "size": [
+            1.35,
+            0.055,
+            0.82
+          ],
+          "position": [
+            0,
+            0.73,
+            0
+          ],
+          "material": "oak",
+          "solid": true
+        },
+        {
+          "id": "leg_0",
+          "kind": "cylinder",
+          "radius": 0.035,
+          "height": 0.7,
+          "position": [
+            -0.58,
+            0.36,
+            -0.33
+          ],
+          "material": "oak"
+        },
+        {
+          "id": "leg_1",
+          "kind": "cylinder",
+          "radius": 0.035,
+          "height": 0.7,
+          "position": [
+            0.58,
+            0.36,
+            -0.33
+          ],
+          "material": "oak"
+        },
+        {
+          "id": "leg_2",
+          "kind": "cylinder",
+          "radius": 0.035,
+          "height": 0.7,
+          "position": [
+            -0.58,
+            0.36,
+            0.33
+          ],
+          "material": "oak"
+        },
+        {
+          "id": "leg_3",
+          "kind": "cylinder",
+          "radius": 0.035,
+          "height": 0.7,
+          "position": [
+            0.58,
+            0.36,
+            0.33
+          ],
+          "material": "oak"
+        },
+        {
+          "id": "lamp_base",
+          "kind": "cylinder",
+          "radius": 0.085,
+          "height": 0.028,
+          "position": [
+            0.46,
+            0.77,
+            0
+          ],
+          "material": "brass"
+        },
+        {
+          "id": "lamp_stem",
+          "kind": "cylinder",
+          "radius": 0.013,
+          "height": 0.26,
+          "position": [
+            0.46,
+            0.91,
+            0
+          ],
+          "material": "brass"
+        },
+        {
+          "id": "lamp_bulb",
+          "kind": "sphere",
+          "radius": 0.075,
+          "position": [
+            0.46,
+            1.08,
+            0
+          ],
+          "material": "glow",
+          "castShadow": false
+        },
+        {
+          "id": "lamp_light",
+          "kind": "light",
+          "light": "point",
+          "position": [
+            0.46,
+            1.08,
+            0
+          ],
+          "color": "#ffcf94",
+          "intensity": 7,
+          "distance": 8.5
+        }
+      ]
+    },
+    {
+      "id": "chair",
+      "kind": "group",
+      "position": [
+        -1.5,
+        0.12,
+        0.5
+      ],
+      "rotation": [
+        0,
+        186,
+        0
+      ],
+      "children": [
+        {
+          "id": "seat",
+          "kind": "box",
+          "size": [
+            0.42,
+            0.05,
+            0.42
+          ],
+          "position": [
+            0,
+            0.45,
+            0
+          ],
+          "material": "oak",
+          "solid": true
+        },
+        {
+          "id": "back",
+          "kind": "box",
+          "size": [
+            0.42,
+            0.46,
+            0.045
+          ],
+          "position": [
+            0,
+            0.7,
+            -0.19
+          ],
+          "material": "oak"
+        },
+        {
+          "id": "cleg_0",
+          "kind": "cylinder",
+          "radius": 0.022,
+          "height": 0.45,
+          "position": [
+            -0.17,
+            0.225,
+            -0.17
+          ],
+          "material": "oak"
+        },
+        {
+          "id": "cleg_1",
+          "kind": "cylinder",
+          "radius": 0.022,
+          "height": 0.45,
+          "position": [
+            0.17,
+            0.225,
+            -0.17
+          ],
+          "material": "oak"
+        },
+        {
+          "id": "cleg_2",
+          "kind": "cylinder",
+          "radius": 0.022,
+          "height": 0.45,
+          "position": [
+            -0.17,
+            0.225,
+            0.17
+          ],
+          "material": "oak"
+        },
+        {
+          "id": "cleg_3",
+          "kind": "cylinder",
+          "radius": 0.022,
+          "height": 0.45,
+          "position": [
+            0.17,
+            0.225,
+            0.17
+          ],
+          "material": "oak"
+        }
+      ]
+    },
+    {
+      "id": "bed",
+      "kind": "group",
+      "position": [
+        1.85,
+        0.12,
+        -0.7
+      ],
+      "children": [
+        {
+          "id": "bed_frame",
+          "kind": "box",
+          "size": [
+            1.3,
+            0.3,
+            2.0
+          ],
+          "position": [
+            0,
+            0.15,
+            0
+          ],
+          "material": "oak",
+          "solid": true
+        },
+        {
+          "id": "mattress",
+          "kind": "box",
+          "size": [
+            1.24,
+            0.2,
+            1.94
+          ],
+          "position": [
+            0,
+            0.4,
+            0
+          ],
+          "material": "linen"
+        },
+        {
+          "id": "quilt",
+          "kind": "box",
+          "size": [
+            1.26,
+            0.07,
+            1.25
+          ],
+          "position": [
+            0,
+            0.53,
+            0.3
+          ],
+          "material": "wool"
+        },
+        {
+          "id": "pillow",
+          "kind": "box",
+          "size": [
+            0.85,
+            0.13,
+            0.36
+          ],
+          "position": [
+            0,
+            0.55,
+            -0.74
+          ],
+          "material": "linen"
+        }
+      ]
+    },
+    {
+      "id": "rug",
+      "kind": "box",
+      "size": [
+        2.0,
+        0.018,
+        1.4
+      ],
+      "position": [
+        -0.7,
+        0.13,
+        0.95
+      ],
+      "material": "wool",
+      "castShadow": false
+    },
+    {
+      "id": "shelf",
+      "kind": "group",
+      "position": [
+        -2.85,
+        0.12,
+        -1.4
+      ],
+      "children": [
+        {
+          "id": "shelf_body",
+          "kind": "box",
+          "size": [
+            0.28,
+            1.5,
+            0.9
+          ],
+          "position": [
+            0,
+            0.75,
+            0
+          ],
+          "material": "oak",
+          "solid": true
+        },
+        {
+          "id": "shelf_book0",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.42,
+            -0.32
+          ],
+          "material": "books"
+        },
+        {
+          "id": "shelf_book1",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.42,
+            -0.265
+          ],
+          "material": "books"
+        },
+        {
+          "id": "shelf_book2",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.42,
+            -0.21000000000000002
+          ],
+          "material": "books"
+        },
+        {
+          "id": "shelf_book3",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.42,
+            -0.155
+          ],
+          "material": "books"
+        },
+        {
+          "id": "shelf_book4",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.42,
+            -0.1
+          ],
+          "material": "books"
+        },
+        {
+          "id": "shelf_book5",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.8200000000000001,
+            -0.32
+          ],
+          "material": "books"
+        },
+        {
+          "id": "shelf_book6",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.8200000000000001,
+            -0.265
+          ],
+          "material": "books"
+        },
+        {
+          "id": "shelf_book7",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.8200000000000001,
+            -0.21000000000000002
+          ],
+          "material": "books"
+        },
+        {
+          "id": "shelf_book8",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.8200000000000001,
+            -0.155
+          ],
+          "material": "books"
+        },
+        {
+          "id": "shelf_book9",
+          "kind": "box",
+          "size": [
+            0.16,
+            0.24,
+            0.045
+          ],
+          "position": [
+            0.02,
+            0.8200000000000001,
+            -0.1
+          ],
+          "material": "books"
+        }
+      ]
+    },
+    {
+      "id": "hearth_light",
+      "kind": "light",
+      "light": "point",
+      "position": [
+        0,
+        2.3200000000000003,
+        0
+      ],
+      "color": "#f2e6d0",
+      "intensity": 2.2,
+      "distance": 9
+    },
+    {
+      "id": "tree_1",
+      "kind": "group",
+      "position": [
+        -7.8,
+        0,
+        2.4
+      ],
+      "scale": 1.0,
+      "rotation": [
+        0,
+        12,
+        0
+      ],
+      "children": [
+        {
+          "id": "trunk_1",
+          "kind": "cylinder",
+          "radiusTop": 0.15,
+          "radiusBottom": 0.27,
+          "height": 2.4,
+          "position": [
+            0,
+            1.2,
+            0
+          ],
+          "material": "bark",
+          "solid": true
+        },
+        {
+          "id": "crown_1a",
+          "kind": "cone",
+          "radius": 1.6,
+          "height": 2.2,
+          "position": [
+            0,
+            2.7,
+            0
+          ],
+          "material": "leaf"
+        },
+        {
+          "id": "crown_1b",
+          "kind": "cone",
+          "radius": 1.25,
+          "height": 2.0,
+          "position": [
+            0.06,
+            3.7,
+            0.04
+          ],
+          "material": "leaf"
+        },
+        {
+          "id": "crown_1c",
+          "kind": "cone",
+          "radius": 0.8,
+          "height": 1.6,
+          "position": [
+            -0.05,
+            4.6,
+            0.02
+          ],
+          "material": "leafhi"
+        }
+      ]
+    },
+    {
+      "id": "tree_2",
+      "kind": "group",
+      "position": [
+        7.9,
+        0,
+        -0.6
+      ],
+      "scale": 1.22,
+      "rotation": [
+        0,
+        -40,
+        0
+      ],
+      "children": [
+        {
+          "id": "trunk_2",
+          "kind": "cylinder",
+          "radiusTop": 0.15,
+          "radiusBottom": 0.27,
+          "height": 2.4,
+          "position": [
+            0,
+            1.2,
+            0
+          ],
+          "material": "bark",
+          "solid": true
+        },
+        {
+          "id": "crown_2a",
+          "kind": "cone",
+          "radius": 1.6,
+          "height": 2.2,
+          "position": [
+            0,
+            2.7,
+            0
+          ],
+          "material": "leaf"
+        },
+        {
+          "id": "crown_2b",
+          "kind": "cone",
+          "radius": 1.25,
+          "height": 2.0,
+          "position": [
+            0.06,
+            3.7,
+            0.04
+          ],
+          "material": "leaf"
+        },
+        {
+          "id": "crown_2c",
+          "kind": "cone",
+          "radius": 0.8,
+          "height": 1.6,
+          "position": [
+            -0.05,
+            4.6,
+            0.02
+          ],
+          "material": "leafhi"
+        }
+      ]
+    },
+    {
+      "id": "tree_3",
+      "kind": "group",
+      "position": [
+        -6.2,
+        0,
+        -5.4
+      ],
+      "scale": 0.82,
+      "rotation": [
+        0,
+        70,
+        0
+      ],
+      "children": [
+        {
+          "id": "trunk_3",
+          "kind": "cylinder",
+          "radiusTop": 0.15,
+          "radiusBottom": 0.27,
+          "height": 2.4,
+          "position": [
+            0,
+            1.2,
+            0
+          ],
+          "material": "bark",
+          "solid": true
+        },
+        {
+          "id": "crown_3a",
+          "kind": "cone",
+          "radius": 1.6,
+          "height": 2.2,
+          "position": [
+            0,
+            2.7,
+            0
+          ],
+          "material": "leaf"
+        },
+        {
+          "id": "crown_3b",
+          "kind": "cone",
+          "radius": 1.25,
+          "height": 2.0,
+          "position": [
+            0.06,
+            3.7,
+            0.04
+          ],
+          "material": "leaf"
+        },
+        {
+          "id": "crown_3c",
+          "kind": "cone",
+          "radius": 0.8,
+          "height": 1.6,
+          "position": [
+            -0.05,
+            4.6,
+            0.02
+          ],
+          "material": "leafhi"
+        }
+      ]
+    },
+    {
+      "id": "tree_4",
+      "kind": "group",
+      "position": [
+        6.4,
+        0,
+        5.6
+      ],
+      "scale": 0.94,
+      "rotation": [
+        0,
+        150,
+        0
+      ],
+      "children": [
+        {
+          "id": "trunk_4",
+          "kind": "cylinder",
+          "radiusTop": 0.15,
+          "radiusBottom": 0.27,
+          "height": 2.4,
+          "position": [
+            0,
+            1.2,
+            0
+          ],
+          "material": "bark",
+          "solid": true
+        },
+        {
+          "id": "crown_4a",
+          "kind": "cone",
+          "radius": 1.6,
+          "height": 2.2,
+          "position": [
+            0,
+            2.7,
+            0
+          ],
+          "material": "leaf"
+        },
+        {
+          "id": "crown_4b",
+          "kind": "cone",
+          "radius": 1.25,
+          "height": 2.0,
+          "position": [
+            0.06,
+            3.7,
+            0.04
+          ],
+          "material": "leaf"
+        },
+        {
+          "id": "crown_4c",
+          "kind": "cone",
+          "radius": 0.8,
+          "height": 1.6,
+          "position": [
+            -0.05,
+            4.6,
+            0.02
+          ],
+          "material": "leafhi"
+        }
+      ]
+    },
+    {
+      "id": "rock_1",
+      "kind": "sphere",
+      "radius": 0.44,
+      "position": [
+        2.9,
+        0.18150000000000002,
+        5.2
+      ],
+      "scale": [
+        1,
+        0.55,
+        1.15
+      ],
+      "material": "stone",
+      "solid": true
+    },
+    {
+      "id": "rock_2",
+      "kind": "sphere",
+      "radius": 0.27,
+      "position": [
+        -2.4,
+        0.12555000000000002,
+        4.3
+      ],
+      "scale": [
+        1,
+        0.62,
+        1.15
+      ],
+      "material": "stone",
+      "solid": true
+    },
+    {
+      "id": "rock_3",
+      "kind": "sphere",
+      "radius": 0.2,
+      "position": [
+        4.6,
+        0.10499999999999998,
+        3.0
+      ],
+      "scale": [
+        1,
+        0.7,
+        1.15
+      ],
+      "material": "stone",
+      "solid": true
+    },
+    {
+      "id": "rock_4",
+      "kind": "sphere",
+      "radius": 0.33,
+      "position": [
+        -4.4,
+        0.12375,
+        6.1
+      ],
+      "scale": [
+        1,
+        0.5,
+        1.15
+      ],
+      "material": "stone",
+      "solid": true
+    }
   ]
 }

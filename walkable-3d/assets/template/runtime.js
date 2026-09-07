@@ -11,6 +11,10 @@
 
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const D2R = Math.PI / 180;
 const EYE = 1.7;          // metres — human eye height. Do not "tune" this.
@@ -19,8 +23,79 @@ const STEP_UP = 0.45;     // max height you can walk up without jumping
 
 /* ---------------------------------------------------------------- geometry */
 
+/* ------------------------------------------------------------------ sky ---
+   A gradient sky written to an equirect canvas. It is the background AND, once
+   run through PMREM, the scene's environment light — which is what stops PBR
+   materials reading as flat paint. A single ambient colour cannot do this.      */
+
+function skyTexture(skyHex, groundHex, sunPos) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const g = c.getContext('2d');
+  const sky = new THREE.Color(skyHex), ground = new THREE.Color(groundHex);
+  const zenith = sky.clone().multiplyScalar(0.72);
+  const haze = sky.clone().lerp(new THREE.Color('#ffffff'), 0.55);
+  const css = c3 => `rgb(${(c3.r * 255) | 0},${(c3.g * 255) | 0},${(c3.b * 255) | 0})`;
+
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0.00, css(zenith));
+  grad.addColorStop(0.34, css(sky));
+  grad.addColorStop(0.49, css(haze));
+  grad.addColorStop(0.51, css(ground.clone().lerp(haze, 0.45)));
+  grad.addColorStop(1.00, css(ground.clone().multiplyScalar(0.75)));
+  g.fillStyle = grad; g.fillRect(0, 0, 1024, 512);
+
+  const [sx3, sy3, sz3] = sunPos;
+  const len = Math.hypot(sx3, sy3, sz3) || 1;
+  const az = Math.atan2(sx3, sz3), el = Math.asin(sy3 / len);
+  const sx = (0.5 - az / (Math.PI * 2)) * 1024;
+  const sy = (0.5 - el / Math.PI) * 512;
+  g.globalCompositeOperation = 'lighter';
+  for (const [r, a] of [[240, 0.30], [110, 0.42], [34, 1.0]]) {
+    const rg = g.createRadialGradient(sx, sy, 0, sx, sy, r);
+    rg.addColorStop(0, `rgba(255,247,228,${a})`);
+    rg.addColorStop(1, 'rgba(255,240,205,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, 1024, 512);
+  }
+  g.globalCompositeOperation = 'source-over';
+
+  const t = new THREE.CanvasTexture(c);
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/* --------------------------------------------------------- rounded boxes ---
+   A perfectly sharp edge is the loudest tell of untouched CAD. Every real edge
+   has a small radius that catches a highlight; 1-2 cm is invisible as geometry
+   and unmistakable as light.                                                    */
+
+function roundedBox(w, h, d, r) {
+  r = Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4);
+  if (!(r > 0.0015)) return new THREE.BoxGeometry(w, h, d);
+  const shape = new THREE.Shape();
+  const x = w / 2 - r, y = h / 2 - r;
+  shape.moveTo(-x, -h / 2);
+  shape.lineTo(x, -h / 2);
+  shape.quadraticCurveTo(w / 2, -h / 2, w / 2, -y);
+  shape.lineTo(w / 2, y);
+  shape.quadraticCurveTo(w / 2, h / 2, x, h / 2);
+  shape.lineTo(-x, h / 2);
+  shape.quadraticCurveTo(-w / 2, h / 2, -w / 2, y);
+  shape.lineTo(-w / 2, -y);
+  shape.quadraticCurveTo(-w / 2, -h / 2, -x, -h / 2);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(d - 2 * r, 1e-4), bevelEnabled: true,
+    bevelSize: r, bevelThickness: r, bevelSegments: 2, curveSegments: 2,
+  });
+  geo.translate(0, 0, -(d / 2 - r));
+  geo.computeVertexNormals();
+  return geo;
+}
+
 const GEOM = {
-  box: o => new THREE.BoxGeometry(...(o.size ?? [1, 1, 1])),
+  box: o => roundedBox(...(o.size ?? [1, 1, 1]),
+                       o.bevel ?? Math.min(0.018, Math.min(...(o.size ?? [1, 1, 1])) * 0.14)),
   plane: o => new THREE.PlaneGeometry(...(o.size ?? [1, 1])),
   sphere: o => new THREE.SphereGeometry(o.radius ?? 0.5, o.segments ?? 24, (o.segments ?? 24) >> 1),
   cylinder: o => new THREE.CylinderGeometry(
@@ -48,41 +123,74 @@ function buildMaterial(def = {}) {
 
 /* ------------------------------------------------------------------- build */
 
-function buildScene(manifest) {
+function buildScene(manifest, renderer) {
   const scene = new THREE.Scene();
   const env = manifest.environment ?? {};
   const sky = new THREE.Color(env.skyColor ?? '#9fb8d4');
   const ground = new THREE.Color(env.groundColor ?? '#4a4640');
+  const sunPos = env.sunPosition ?? [12, 20, 8];
 
-  scene.background = sky;
-  if (env.fog) scene.fog = new THREE.Fog(sky, env.fog[0] ?? 5, env.fog[1] ?? 90);
+  // Sky as background AND as image-based lighting. The IBL is what gives every
+  // surface a direction-dependent response instead of one flat shade.
+  const skyTex = skyTexture(sky, ground, sunPos);
+  scene.background = skyTex;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  scene.environment = pmrem.fromEquirectangular(skyTex).texture;
+  // Keep the IBL as fill, not as the key light — push it much past ~0.6 and it
+  // washes the albedo out until every surface reads as the same pale grey.
+  scene.environmentIntensity = env.envIntensity ?? 0.5;
 
-  // Lighting recipe: hemisphere fill + one keyed, shadow-casting sun + a weak
-  // rim. Flat, single-ambient scenes are the #1 tell of generated 3D.
-  scene.add(new THREE.HemisphereLight(sky, ground, env.ambient ?? 0.55));
-  const sun = new THREE.DirectionalLight(0xfff3e0, env.sunIntensity ?? 2.2);
-  sun.position.set(...(env.sunPosition ?? [12, 20, 8]));
+  if (env.fog) {
+    const horizon = sky.clone().lerp(new THREE.Color('#ffffff'), 0.5);
+    scene.fog = new THREE.Fog(horizon, env.fog[0] ?? 5, env.fog[1] ?? 90);
+  }
+
+  // One keyed, shadow-casting sun over the IBL, plus a cool bounce from below
+  // the horizon. A single ambient light is the #1 tell of generated 3D.
+  const sun = new THREE.DirectionalLight(0xfff2dd, env.sunIntensity ?? 2.0);
+  sun.position.set(...sunPos);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.05;   // kills the banded acne on large flat walls
+  const sm = env.shadowMap ?? 4096;
+  sun.shadow.mapSize.set(sm, sm);
+  sun.shadow.bias = env.shadowBias ?? -0.0016;
+  // normalBias must stay well under the thinnest wall in the scene: it offsets
+  // the sample along the normal, and 8 cm on a 16 cm wall pushes it out the
+  // other side, which reads as a jagged band rather than as the acne it fixes.
+  sun.shadow.normalBias = env.normalBias ?? 0.035;
+  sun.shadow.radius = 1.0;
   const s = env.shadowExtent ?? 30;
   Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 0.5, far: s * 4 });
   scene.add(sun, sun.target);
-  const rim = new THREE.DirectionalLight(0xbcd0ff, 0.35);
-  rim.position.set(-10, 8, -12);
-  scene.add(rim);
+  scene.add(new THREE.HemisphereLight(sky, ground, env.ambient != null ? env.ambient * 0.45 : 0.28));
 
   const materials = new Map();
   for (const [name, def] of Object.entries(manifest.materials ?? {})) {
     materials.set(name, buildMaterial(def));
   }
+  // A tiny per-object shade variation. Twenty identical flat surfaces is the
+  // second-loudest tell after sharp edges; ±4% is invisible as a decision and
+  // obvious as an absence.
+  let jseed = 0x9e3779b9;
+  const jitter = () => { jseed = (Math.imul(jseed, 1664525) + 1013904223) | 0; return ((jseed >>> 0) / 4294967296 - 0.5); };
+  const varied = new Map();
   const matFor = o => {
+    let base;
     if (typeof o.material === 'string') {
       if (!materials.has(o.material)) materials.set(o.material, buildMaterial({ color: '#c0392b' }));
-      return materials.get(o.material);
+      base = materials.get(o.material);
+    } else base = buildMaterial(o.material ?? {});
+    if (o.vary === false || manifest.vary === false) return base;
+    const key = `${o.id}`;
+    if (!varied.has(key)) {
+      const m = base.clone();
+      const hsl = {}; m.color.getHSL(hsl);
+      m.color.setHSL(hsl.h, THREE.MathUtils.clamp(hsl.s * (1 + jitter() * 0.10), 0, 1),
+                            THREE.MathUtils.clamp(hsl.l * (1 + jitter() * 0.09), 0, 1));
+      m.roughness = THREE.MathUtils.clamp(m.roughness + jitter() * 0.08, 0.04, 1);
+      varied.set(key, m);
     }
-    return buildMaterial(o.material ?? {});
+    return varied.get(key);
   };
 
   const byId = new Map();
@@ -97,6 +205,26 @@ function buildScene(manifest) {
   };
   flatten(manifest.objects);
 
+  const makeLight = o => {
+    const col = new THREE.Color(o.color ?? '#ffffff');
+    const inten = o.intensity ?? 8;
+    let l;
+    if (o.light === 'spot') {
+      l = new THREE.SpotLight(col, inten, o.distance ?? 0, (o.angle ?? 40) * D2R, o.penumbra ?? 0.4, o.decay ?? 2);
+    } else if (o.light === 'rect' || o.light === 'area') {
+      l = new THREE.PointLight(col, inten, o.distance ?? 0, o.decay ?? 2);   // RectAreaLight needs extra deps
+    } else {
+      l = new THREE.PointLight(col, inten, o.distance ?? 0, o.decay ?? 2);
+    }
+    if (o.castShadow) {
+      l.castShadow = true;
+      l.shadow.mapSize.set(1024, 1024);
+      l.shadow.bias = -0.002;
+      l.shadow.normalBias = 0.02;
+    }
+    return l;
+  };
+
   for (const o of collect) {
     if (!o.id) { console.warn('[scene] object without id, skipped', o); continue; }
     // A duplicate id used to silently drop the second object. Keep both, rename
@@ -109,7 +237,9 @@ function buildScene(manifest) {
     }
 
     let node;
-    if (o.kind === 'group' || !o.kind) {
+    if (o.kind === 'light') {
+      node = makeLight(o);
+    } else if (o.kind === 'group' || !o.kind) {
       node = new THREE.Group();
     } else if (GEOM[o.kind]) {
       node = new THREE.Mesh(GEOM[o.kind](o), matFor(o));
@@ -143,6 +273,30 @@ function buildScene(manifest) {
 
   scene.updateMatrixWorld(true);
   scene.traverse(n => { if (n.userData?.solid) solids.push(new THREE.Box3().setFromObject(n)); });
+
+  // Fit the shadow camera to what was actually built, ignoring terrain-sized
+  // slabs. A hand-set extent is nearly always far too generous, and every
+  // wasted metre costs shadow-map resolution where the geometry actually is.
+  if (env.shadowExtent == null) {
+    const full = new THREE.Box3().setFromObject(scene);
+    const area = Math.max((full.max.x - full.min.x) * (full.max.z - full.min.z), 1e-6);
+    const acc = new THREE.Box3(); let kept = 0;
+    scene.traverse(n => {
+      if (!n.isMesh || !n.userData?.__manifest) return;
+      const b = new THREE.Box3().setFromObject(n);
+      if (((b.max.x - b.min.x) * (b.max.z - b.min.z)) / area > 0.45) return;
+      acc.union(b); kept++;
+    });
+    if (kept) {
+      const c = acc.getCenter(new THREE.Vector3());
+      const half = Math.max(acc.max.x - acc.min.x, acc.max.z - acc.min.z) * 0.62 + 2;
+      Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, near: 0.5, far: half * 6 });
+      sun.target.position.copy(c);
+      sun.position.set(c.x + sunPos[0], c.y + sunPos[1], c.z + sunPos[2]);
+      sun.target.updateMatrixWorld();
+      sun.shadow.camera.updateProjectionMatrix();
+    }
+  }
 
   return { scene, sun, solids, byId };
 }
@@ -217,7 +371,7 @@ function makeController(camera, solids, colliders, spawn) {
     camera.rotation.set(state.pitch, state.yaw, 0, 'YXZ');
   }
 
-  return { step, state, pos };
+  return { step, state, pos, floorAt, overlaps };
 }
 
 /* ------------------------------------------------------------------ boot */
@@ -228,8 +382,6 @@ async function boot() {
     return r.json();
   });
 
-  const { scene, solids, byId } = buildScene(manifest);
-
   const camera = new THREE.PerspectiveCamera(manifest.fov ?? 68, innerWidth / innerHeight, 0.05, 800);
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -237,8 +389,40 @@ async function boot() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = manifest.environment?.exposure ?? 1.0;
+  renderer.toneMappingExposure = manifest.environment?.exposure ?? 0.95;
   document.body.appendChild(renderer.domElement);
+
+  const { scene, solids, byId } = buildScene(manifest, renderer);
+
+  // Ambient occlusion. Contact darkening where surfaces meet is the single
+  // strongest cue that objects are IN a scene rather than pasted onto it —
+  // without it, everything floats no matter how correct the geometry is.
+  let composer = null;
+  const aoOn = (manifest.environment?.ao ?? true);
+  if (aoOn) {
+    try {
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      const gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+      gtao.output = GTAOPass.OUTPUT.Default;
+      gtao.blendIntensity = manifest.environment?.aoIntensity ?? 1.0;
+      gtao.updateGtaoMaterial({
+        // Radius is in METRES. The library default (~0.25) is tuned for props;
+        // at room and building scale it produces nothing you can see.
+        radius: manifest.environment?.aoRadius ?? 1.5,
+        distanceExponent: 1.0, thickness: 1.0,
+        scale: manifest.environment?.aoScale ?? 1.6,
+        samples: 16, distanceFallOff: 1.0, screenSpaceRadius: false,
+      });
+      composer.addPass(gtao);
+      composer.addPass(new OutputPass());
+      window.__ao = gtao;
+    } catch (e) {
+      console.warn('[scene] ambient occlusion unavailable, falling back to direct render:', e.message);
+      composer = null;
+    }
+  }
+  const present = () => (composer ? composer.render() : renderer.render(scene, camera));
 
   const colliders = [];
   scene.traverse(n => { if (n.isMesh) colliders.push(n); });
@@ -250,6 +434,7 @@ async function boot() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+    composer?.setSize(innerWidth, innerHeight);
   });
 
   const start = document.getElementById('start');
@@ -260,11 +445,15 @@ async function boot() {
 
   let last = performance.now(), fps = 0, acc = 0, frames = 0, frozen = false;
   function loop(now) {
-    const dt = Math.min((now - last) / 1000, 0.05); last = now;
+    // Clamp to [0, 0.05]. rAF's timestamp is the frame's start time and can be
+    // EARLIER than the performance.now() we seeded `last` with, which makes the
+    // first dt negative — gravity then adds upward velocity and the player is
+    // flung out of the world before the first frame is drawn.
+    const dt = Math.min(Math.max((now - last) / 1000, 0), 0.05); last = now;
     acc += dt; frames++;
     if (acc > 0.5) { fps = Math.round(frames / acc); acc = 0; frames = 0; }
     if (!frozen) ctrl.step(dt);
-    renderer.render(scene, camera);
+    present();
     hud.textContent =
       `${fps} fps · ${renderer.info.render.calls} calls · ` +
       `${(renderer.info.render.triangles / 1000).toFixed(0)}k tris\n` +
@@ -275,7 +464,7 @@ async function boot() {
 
   /* ---- headless + tooling hooks ---- */
 
-  window.__three = { THREE, scene, camera, renderer, byId, manifest };
+  window.__three = { THREE, scene, camera, renderer, byId, manifest, ctrl };
 
   /** Take manual control of the camera: freezes the walk sim and hides the UI
    *  chrome, so a headless capture shows the scene and nothing else. */
@@ -286,11 +475,22 @@ async function boot() {
     if (position) camera.position.set(...position);
     if (lookAt) camera.lookAt(new THREE.Vector3(...lookAt));
     camera.updateMatrixWorld(true);
-    renderer.render(scene, camera);
+    present();
     return { position: camera.position.toArray(), rotation: camera.rotation.toArray().slice(0, 3) };
   };
 
   window.__thaw = () => { frozen = false; hud.style.display = ''; };
+
+  /** Advance the walk simulation by `sec` of fixed steps, with no dependence on
+   *  requestAnimationFrame — which a headless or hidden page throttles or pauses
+   *  outright. This is how a checker asks "does the ground hold the player up?"
+   *  and gets the same answer every time. */
+  window.__simulate = (sec = 1, dt = 1 / 60) => {
+    const n = Math.max(1, Math.round(sec / dt));
+    for (let i = 0; i < n; i++) ctrl.step(dt);
+    return { y: ctrl.pos.y, vy: ctrl.state.vy, onGround: ctrl.state.onGround,
+             x: ctrl.pos.x, z: ctrl.pos.z, steps: n };
+  };
 
   /** Hide everything sitting entirely above `y`, so a top-down shot cuts through
    *  the building instead of photographing its roof. The single most useful
@@ -304,7 +504,7 @@ async function boot() {
       n.visible = hide ? false : n.userData.__clipOrig;
       if (hide) hidden++;
     });
-    renderer.render(scene, camera);
+    present();
     return hidden;
   };
 
@@ -312,7 +512,7 @@ async function boot() {
     scene.traverse(n => {
       if (n.userData?.__clipOrig !== undefined) n.visible = n.userData.__clipOrig;
     });
-    renderer.render(scene, camera);
+    present();
   };
 
   const boxOf = b => ({
@@ -352,6 +552,12 @@ async function boot() {
   });
 
   window.__auditData = () => {
+    // Measure with a direct scene render: with a post-processing chain,
+    // renderer.info reports the last full-screen pass, not the scene.
+    renderer.setRenderTarget(null);   // the composer leaves one bound; measuring
+    renderer.info.reset();            // into it reports the pass, not the scene
+    renderer.render(scene, camera);
+    const stats = { ...renderer.info.render, ...{ geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures } };
     const objs = [];
     scene.traverse(n => {
       if (!n.userData?.__manifest) return;   // skip lights, light targets, helpers
@@ -359,7 +565,7 @@ async function boot() {
       const size = box.getSize(new THREE.Vector3());
       objs.push({
         id: n.name || '(unnamed)',
-        type: n.isMesh ? (n.userData.kind ?? 'mesh') : 'group',
+        type: n.isLight ? 'light' : n.isMesh ? (n.userData.kind ?? 'mesh') : 'group',
         parent: n.parent === scene ? null : (n.parent?.name || null),
         solid: !!n.userData.solid,
         visible: n.visible,
@@ -373,7 +579,7 @@ async function boot() {
       objects: objs,
       bounds: window.__bounds(),
       spawn: manifest.spawn ?? null,
-      render: { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures },
+      render: { calls: stats.calls, triangles: stats.triangles, geometries: stats.geometries, textures: stats.textures },
     };
   };
 

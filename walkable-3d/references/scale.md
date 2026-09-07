@@ -99,8 +99,13 @@ Sketch a metre grid in your head or in a comment block, then place. In practice:
   8°, push a rug 15 cm off centre.
 - **Give the eye a path.** From the spawn point there should be something worth
   walking to — a lit doorway, a gap between buildings.
-- **One warm light source.** An `emissive` lamp or window costs nothing and does
-  more for atmosphere than another 500 triangles.
+- **One warm light source, and an actual light with it.** `emissive` makes a
+  surface glow; it emits nothing. Pair it with a `kind: "light"` object or the
+  room stays dark. This is the single biggest difference between an interior
+  that reads as a room and one that reads as a box.
+- **Cut real openings.** A wall with a window — two segments, a lintel, a sill,
+  a glass pane and a frame — costs six objects and changes the whole read of a
+  facade. A blank wall with a door hole is the greybox look.
 - **Colour discipline.** Six to ten materials for a room, not thirty. Real
   interiors are mostly two or three neutrals plus accents.
 
@@ -120,5 +125,6 @@ Sketch a metre grid in your head or in a comment block, then place. In practice:
                    "sunPosition": [-14, 18, -8], "sunIntensity": 0.35, "fog": [4, 45] }
 ```
 
-At night, light the scene with `emissive` materials — lamps, windows, signs —
-not by raising `ambient`, which just makes everything grey.
+At night, light the scene with `emissive` materials **plus light objects** —
+lamps, windows, signs — not by raising `ambient`, which just makes everything
+grey. `envIntensity` should come down at night too; the sky has little to give.

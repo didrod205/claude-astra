@@ -178,7 +178,7 @@ addEventListener('pointerdown',()=>{if(api.state().status!=='playing')api.input(
 api.seed(Date.now() & 0x7fffffff);
 let acc = 0, last = performance.now();
 (function loop(now) {
-  acc += Math.min(now - last, 100); last = now;
+  acc += Math.min(Math.max(now - last, 0), 100); last = now;
   while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
   draw();
   requestAnimationFrame(loop);
