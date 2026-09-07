@@ -42,9 +42,15 @@ const api = {
 };
 window.__game = api;
 
-const KEYS = { ArrowLeft: 'left', ArrowRight: 'right', Space: 'start' };
-addEventListener('keydown', e => { const a = KEYS[e.code]; if (a) { e.preventDefault(); api.input(a, true); } });
-addEventListener('keyup',   e => { const a = KEYS[e.code]; if (a) api.input(a, false); });
+// Bind on BOTH e.code and e.key. Synthetic events — browser automation, some
+// IMEs — often arrive with no `code` at all, and a letter key comes through as
+// e.key 'p', never 'KeyP'. A game that reads only e.code cannot be driven by them.
+const bind = m => { const t = {}; for (const k in m) { t[k] = m[k];
+  if (/^Key[A-Z]$/.test(k)) { t[k[3].toLowerCase()] = m[k]; t[k[3]] = m[k]; }
+  if (k === 'Space') t[' '] = m[k]; } return t; };
+const KEYS = bind({ ArrowLeft: 'left', ArrowRight: 'right', Space: 'start' });
+addEventListener('keydown', e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) { e.preventDefault(); api.input(a, true); } });
+addEventListener('keyup',   e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) api.input(a, false); });
 
 let acc = 0, last = performance.now();
 (function loop(now) {                    // the ONLY place real time appears
@@ -105,6 +111,12 @@ second player a scripted or trivial AI so single-player playtesting still
 exercises the loop.
 
 ## Mistakes the harness will catch, so save yourself the round trip
+
+One more, which the harness cannot catch because it drives `input()` directly:
+**the HUD must not be the only place state is visible.** If your DOM counters are
+written inside `draw()`, they freeze wherever the frame loop is paused — a
+background tab, a hidden automation pane — and anyone testing the page through
+the DOM sees stale values against working code. Keep `state()` authoritative.
 
 | mistake | shows up as |
 |---|---|

@@ -163,10 +163,18 @@ window.__game = api;
 
 /* --------------------------------------------------------- human input */
 
-const KEYS = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'start' };
-addEventListener('keydown', e => { const a = KEYS[e.code]; if (a) { e.preventDefault(); api.input(a, true); } });
-addEventListener('keyup', e => { const a = KEYS[e.code]; if (a) api.input(a, false); });
+// Bind on BOTH e.code and e.key. Synthetic key events — automation, some IMEs —
+// frequently arrive with no `code` at all, and a letter key comes through as
+// e.key 'a', never 'KeyA'. A game that reads only e.code is undrivable by them.
+const bind = m => { const t = {}; for (const k in m) { t[k] = m[k];
+  if (/^Key[A-Z]$/.test(k)) { t[k[3].toLowerCase()] = m[k]; t[k[3]] = m[k]; }
+  if (/^Digit[0-9]$/.test(k)) t[k[5]] = m[k];
+  if (k === 'Space') t[' '] = m[k]; } return t; };
+const KEYS = bind({ ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'start' });
+addEventListener('keydown', e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) { e.preventDefault(); api.input(a, true); } });
+addEventListener('keyup', e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) api.input(a, false); });
 
+addEventListener('pointerdown',()=>{if(api.state().status!=='playing')api.input('start',true);});
 api.seed(Date.now() & 0x7fffffff);
 let acc = 0, last = performance.now();
 (function loop(now) {

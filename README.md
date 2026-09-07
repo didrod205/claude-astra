@@ -129,6 +129,24 @@ found four more defects, each now pinned by a check above:
 - Passing a directory with no `index.html` produced a confusing 404 report
   instead of saying so.
 
+Driving the flows half against a live prototype — the click-through session the
+sweep cannot do — found two more, both of the kind that make a QA report *wrong*
+rather than incomplete:
+
+- **`requestAnimationFrame` never fires while the browser pane is hidden**, and
+  fronting the tab does not help because it is the pane that is hidden. Driving a
+  real 1.5 seconds left the game's `tick` at 0 and its DOM counters at their
+  initial values while the internal state had already changed. A tester reading
+  only the DOM would have filed "the counter never updates" against working code.
+- **Synthetic key events arrive without `e.code`** — `ArrowRight` came through on
+  `e.key` alone, and `space` with both fields empty — so any handler written as
+  `KEYS[e.code]`, the common form, silently never fires while the tool still
+  reports the key as pressed.
+
+Both are now in `frontend-qa/references/flows.md`, with what to assert instead.
+The second was also a real portability bug in this repo's own game template,
+which read `e.code` only; it now binds on both.
+
 The one bug the suite was originally written after finding: the size-ladder check silently
 skipped `.docx` and `.pptx`, because those formats declare point sizes per run
 rather than in a styles part, so a 19pt heading in a 12pt house passed clean.

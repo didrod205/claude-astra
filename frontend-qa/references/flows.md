@@ -36,6 +36,52 @@ you know the page; use single calls while you are still learning it.
 and a layout shift; `(412, 380)` does not. Fall back to coordinates only for
 canvas and custom-drawn widgets.
 
+## Two things that will make your report wrong
+
+Both were found by actually driving a page, and neither is visible from the docs.
+
+### The pane is hidden, so `requestAnimationFrame` never fires
+
+`document.visibilityState` is `"hidden"` while the Browser pane is not displayed
+— and fronting the tab does not change it, because it is the *pane*, not the tab,
+that is hidden. Nothing driven by a frame loop advances: a canvas game, an
+animated chart, a counter updated inside `draw()`, a progress bar. Waiting does
+not help; a page frozen this way looks exactly like a page that is broken.
+
+```js
+document.visibilityState   // "hidden" → rAF is paused. Read this BEFORE
+                           //            concluding an animated UI is stale.
+```
+
+Driving a real 1.5 seconds against such a page left `tick` at 0 and the HUD
+reading its initial value while the internal state had already changed — a
+tester reading only the DOM would have filed "the counter never updates" against
+working code.
+
+What to do:
+
+- **Assert on state that changes synchronously with the event**, not on whatever
+  the render loop paints. A well-built page updates its model on the click; only
+  the painting waits for the frame.
+- **Drive the loop yourself** when the app exposes a way — `__game.step(300)` on
+  a prototype from `playable-prototype`, or whatever tick function the app has.
+  After 300 explicit ticks the same page's DOM read `landed 1` correctly.
+- **Say so in the report.** "Not checked: anything that only updates on a frame
+  loop" is an honest line; a false bug is not.
+
+### Synthetic key events arrive without `e.code`
+
+The `computer` tool's `key` action dispatches events that are **missing
+`e.code`** — `ArrowRight` came through with `e.key` only, and `space` arrived
+with `key` *and* `code` both empty strings. Any handler written as
+`KEYS[e.code]` — the common form — silently never fires, and the tool still
+reports `pressed space x1`.
+
+So: keyboard input through this tool is lossy. Prefer pointer interaction, or
+the app's own API, for anything load-bearing. If a key genuinely does nothing,
+check whether the handler reads `e.code` before filing it as a bug — and if you
+are also the author, bind on `e.code || e.key`.
+
 ## What "assert" means here
 
 | bad | good |
