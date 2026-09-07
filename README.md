@@ -220,17 +220,18 @@ reflex vs. deliberation, direct vs. indirect control — builds each as one
 self-contained HTML file, then has a bot play all of them.
 
 ```bash
-node playable-prototype/scripts/playtest.mjs prototypes/ --out shots --ticks 2400
+node playable-prototype/scripts/playtest.mjs prototypes/ --out shots --ticks 1200 --seeds 5
 ```
 
 ```
-playtest — 3 prototype(s), 2400 ticks each
+playtest — 3 prototype(s), 1200 ticks, 5 seeds
 
-  ok  a-beam    bot scored 8,  over @ tick 1032 · 2/2 actions live · 5 ms/1000t
-  ok  b-watch   bot scored 9,  over @ tick 510  · 3/3 actions live · 6 ms/1000t · turn-based
-  ok  c-buoys   bot scored 27, survived 2400    · 5/5 actions live · 9 ms/1000t
+  ok  a-beam   random 12 (7–13 over 5 seeds) · same seed: random 7 vs lookahead 11 (1.6x) · 2/2 live
+  ok  b-watch  random  5 (2–9 over 5 seeds)  · same seed: random 9 vs lookahead 13 (1.4x) · 3/3 · turn-based
+  !   c-buoys  random 14 (12–14 over 5 seeds) · same seed: random 9 vs lookahead 9 (1.0x) · 5/5 live
+        ! [depth] a shallow lookahead player did not beat random on the same seed
 
-  3 clean · 0 with warnings · 0 not playable
+  2 clean · 1 with warnings · 0 not playable
 ```
 
 <p align="center">
@@ -239,8 +240,19 @@ playtest — 3 prototype(s), 2400 ticks each
 </p>
 
 The bot holds every declared input and fails the ones that change nothing, runs
-the same seed twice and fails a disagreement, and plays at random to check the
-game can be scored in at all. You can drive any prototype the same way:
+the same seed twice and fails a disagreement, and plays at random across several
+seeds to check the game can be scored in at all — and that the *seed* is not
+quietly deciding the outcome.
+
+**The last number is the one worth having.** A prototype is deterministic and
+seeded, so *"what if I had pressed something else"* has an exact answer: replay
+from the seed with a different next action. Comparing a player that does that
+against one pressing at random measures whether the inputs carry a decision —
+the question a prototyping pass exists to answer, and not one you can get by
+playing the thing once. A `1.0x` is flagged, with both of its possible causes
+named: no decision, or a payoff slower than a shallow lookahead can see.
+
+You can drive any prototype the same way:
 
 ```js
 __game.seed(7); __game.reset(); __game.start();
