@@ -80,6 +80,8 @@ house-style
   ok    pptx: a real PowerPoint file matches its own spec
   ok    docx: off-house face and off-ladder size are caught
   ok    pptx: off-house face, 16:9 geometry and off-ladder size are caught
+  ok    prose: the house deck matches its own voice
+  ok    prose: an off-voice deck is caught on density, sentences, punctuation, person and titles
 ```
 
 Every check is run **both ways** — a good input must pass and a deliberately
@@ -312,21 +314,32 @@ python3 house-style/scripts/style.py check  draft.pptx --spec style.json
 ```
 
 ```
-house style from 1 sample(s): real.pptx
+house style from 1 sample(s): house.pptx
 
   fonts     Arial, Calibri
   palette   #000000 #FFFFFF #1F497D #EEECE1 #4F81BD #C0504D #9BBB59 #8064A2
-  sizes     9.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 40.0, 44.0 pt
+  sizes     9.0, 12.0, 14.0, 18.0, 20.0, 24.0, 28.0, 32.0, 40.0, 44.0 pt
   slide_in  [10.0, 7.5]
   layouts   Title Slide, Section Header, Two Content, Comparison, Title Only …
+  prose     9 words/slide · sentence 3 w · 3.0 bullets/slide · 0% end in a full stop · headings 1 w
 
-style check — 1 file(s) against pptx-style.json
+style check — 1 file(s) against house.json
 
-  x drift.pptx  [font] typefaces not in the house set: Impact
-  x drift.pptx  [geometry] slide_in is [13.33, 7.5] but the house style is [10.0, 7.5]
-  ! drift.pptx  [color] colours outside the palette: #D91C21
-  ! drift.pptx  [size] point sizes not in the house ladder: [54.0]
+  x [font] typefaces not in the house set: Impact
+  x [geometry] slide_in is [13.33, 7.5] but the house style is [10.0, 7.5]
+  ! [density] 78 words per slide against a house average of 9 — more than twice as dense
+  ! [sentences] median sentence is 22 words against the house 3
+  ! [punctuation] house blocks do not end in a full stop; these mostly do
+  ! [voice] first person appears 110x per 1000 words; the samples barely use it
+  ! [titles] headings run 11 words against the house 1 — the samples label, these assert
 ```
+
+**It measures the writing too, not only the colours.** Density, sentence length,
+whether blocks end in a full stop, how much first person appears, and how long a
+heading runs — a deck titled *"Q3 Revenue"* and one titled *"We are delighted to
+report that third quarter revenue grew substantially"* are not the same house,
+and the difference is a number. Density is the constraint most likely to be
+quietly ignored, which is why it is checked rather than described.
 
 The `docx` / `pptx` / `xlsx` skills write the file; this one decides what goes in
 it and proves it matches. The layout names are worth more than any colour value —

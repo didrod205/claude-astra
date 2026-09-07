@@ -135,6 +135,7 @@ def read_docx(z):
             if mar is not None:
                 d['margins_in'] = {k: round(int(mar.get(f'{{{NS["w"]}}}{k}', 0)) / TWIP_IN, 2)
                                    for k in ('top', 'right', 'bottom', 'left')}
+    d['prose'] = prose_docx(z)
     f, c, sz = scan_used(z, [r'word/document\.xml', r'word/header\d*\.xml', r'word/footer\d*\.xml'])
     d['fonts_used'] = dict(f.most_common(12))
     d['colors_used'] = dict(c.most_common(16))
@@ -164,6 +165,7 @@ def read_pptx(z):
     d['layouts'] = layouts
     d['slide_count'] = sum(1 for x in z.namelist()
                            if re.fullmatch(r'ppt/slides/slide\d+\.xml', x))
+    d['prose'] = prose_pptx(z)
     f, c, sz = scan_used(z, [r'ppt/slides/slide\d+\.xml',
                              r'ppt/slideMasters/slideMaster\d+\.xml',
                              r'ppt/slideLayouts/slideLayout\d+\.xml'])
@@ -219,7 +221,7 @@ def read_pdf(path):
                     bottomright = (max(x1, bottomright[0]), max(y1, bottomright[1])) if bottomright else (x1, y1)
         if i >= 19:
             break
-    d = {'kind': 'pdf', 'pages': doc.page_count, 'page_in': page_in,
+    d = {'kind': 'pdf', 'pages': doc.page_count, 'page_in': page_in, 'prose': prose_pdf(path),
          'fonts_used': dict(fonts.most_common(12)),
          'sizes_pt': [s for s, _ in sizes.most_common(10)],
          'colors_used': dict(colors.most_common(16))}
@@ -228,6 +230,124 @@ def read_pdf(path):
     if left is not None and page_in:
         d['text_inset_in'] = {'left': round(left / 72, 2)}
     return d
+
+
+# ------------------------------------------------------------------ prose ---
+# The visual system is half a house style. The other half - how long a sentence
+# runs, how many words go on a slide, whether a bullet ends in a full stop - is
+# usually called unmeasurable and then quietly ignored. Most of it is countable.
+
+_WS = re.compile(r'\s+')
+_SENT = re.compile(r'[.!?\u3002\uff01\uff1f]+(?=\s|$)')
+_FIRST = re.compile(r'\b(we|our|us|i|my)\b', re.I)
+_SECOND = re.compile(r'\b(you|your)\b', re.I)
+_HEDGE = re.compile(r'\b(may|might|could|appears?|suggests?|likely|potentially|seems?)\b', re.I)
+_TAGRE = re.compile(r'<[^>]+>')
+
+
+def _words(t):
+    t = t.strip()
+    return len(_WS.split(t)) if t else 0
+
+
+def _paras_ooxml(blob, ptag, ttag):
+    """Split one part into paragraphs and pull the text runs out of each."""
+    out = []
+    for chunk in re.split(rf'<{ptag}[ >]', blob)[1:]:
+        chunk = chunk.split(f'</{ptag}>')[0]
+        txt = ''.join(re.findall(rf'<{ttag}[^>]*>(.*?)</{ttag}>', chunk, re.S))
+        txt = _TAGRE.sub('', txt)
+        for a, b in (('&amp;', '&'), ('&lt;', '<'), ('&gt;', '>'), ('&quot;', '"'), ('&#39;', "'")):
+            txt = txt.replace(a, b)
+        out.append({'text': txt.strip(), 'raw': chunk})
+    return out
+
+
+def prose_docx(z):
+    try:
+        blob = z.read('word/document.xml').decode('utf-8', 'ignore')
+    except KeyError:
+        return None
+    paras = _paras_ooxml(blob, 'w:p', 'w:t')
+    body, heads, bullets = [], [], 0
+    for p in paras:
+        if not p['text']:
+            continue
+        style = re.search(r'w:pStyle w:val="([^"]+)"', p['raw'])
+        st = style.group(1) if style else ''
+        if st.lower().startswith('heading') or st.lower() == 'title':
+            heads.append(p['text'])
+        else:
+            body.append(p['text'])
+            if 'w:numPr' in p['raw'] or 'listparagraph' in st.lower():
+                bullets += 1
+    return _prose(body, heads, bullets, unit='page', units=max(1, len(body) // 18 + 1))
+
+
+def prose_pptx(z):
+    slides = sorted(n for n in z.namelist() if re.fullmatch(r'ppt/slides/slide\d+\.xml', n))
+    body, heads, bullets, per = [], [], 0, []
+    for n in slides:
+        blob = z.read(n).decode('utf-8', 'ignore')
+        paras = [p for p in _paras_ooxml(blob, 'a:p', 'a:t') if p['text']]
+        if not paras:
+            per.append(0); continue
+        heads.append(paras[0]['text'])
+        rest = [p['text'] for p in paras[1:]]
+        body += rest
+        bullets += len(rest)
+        per.append(sum(_words(t) for t in rest) + _words(paras[0]['text']))
+    if not slides:
+        return None
+    d = _prose(body, heads, bullets, unit='slide', units=len(slides))
+    d['words_per_unit'] = round(sum(per) / max(1, len(per)), 1)
+    d['bullets_per_unit'] = round(bullets / max(1, len(slides)), 1)
+    return d
+
+
+def prose_pdf(path):
+    try:
+        import fitz
+    except ImportError:
+        return None
+    doc = fitz.open(path)
+    pages = [page.get_text() for page in doc][:40]
+    body = [ln.strip() for pg in pages for ln in pg.splitlines() if ln.strip()]
+    return _prose(body, [], 0, unit='page', units=max(1, len(pages)))
+
+
+_TERMINAL = ('.', '!', '?', '\u3002', '\uff01', '\uff1f')
+
+
+def _prose(body, heads, bullets, unit, units):
+    text = ' '.join(body)
+    words = _words(text)
+    # Split sentences WITHIN each block. Joining first merges a whole deck of
+    # unpunctuated fragments into one 31-word "sentence" that exists nowhere.
+    slen = []
+    for b in body:
+        parts = [x for x in _SENT.split(b) if x.strip()] or ([b] if b.strip() else [])
+        slen += [_words(x) for x in parts]
+    slen = sorted(slen) or [0]
+    hl = sorted(_words(h) for h in heads) or [0]
+    ends = [b for b in body if b]
+    period = sum(1 for b in ends if b.rstrip().endswith(_TERMINAL)) / max(1, len(ends))
+    return {
+        'unit': unit, 'units': units,
+        'words_total': words,
+        'words_per_unit': round(words / max(1, units), 1),
+        'blocks': len(body),
+        'sentence_words_median': slen[len(slen) // 2],
+        'sentence_words_p90': slen[int(len(slen) * 0.9) - 1] if slen else 0,
+        'bullets': bullets,
+        'bullets_per_unit': round(bullets / max(1, units), 1),
+        'block_ends_with_period': round(period, 2),
+        'heading_words_median': hl[len(hl) // 2],
+        'first_person_per_1k': round(len(_FIRST.findall(text)) * 1000 / max(1, words), 1),
+        'second_person_per_1k': round(len(_SECOND.findall(text)) * 1000 / max(1, words), 1),
+        'hedges_per_1k': round(len(_HEDGE.findall(text)) * 1000 / max(1, words), 1),
+        'exclamations': text.count('!'),
+    }
 
 
 READERS = {'.docx': read_docx, '.dotx': read_docx, '.pptx': read_pptx,
@@ -281,7 +401,27 @@ def build_spec(samples):
             if d.get(k) and k not in geometry:
                 geometry[k] = d[k]
 
+    # Merge the prose measurements per unit kind (slide vs page): they are not
+    # comparable across formats, so a deck and a report keep separate budgets.
+    prose = {}
+    for d in docs:
+        pr = d.get('prose')
+        if not pr:
+            continue
+        b = prose.setdefault(pr['unit'], {'n': 0})
+        b['n'] += 1
+        for k, v in pr.items():
+            if isinstance(v, (int, float)):
+                b[k] = b.get(k, 0) + v
+    for unit, b in prose.items():
+        n = b.pop('n')
+        for k in list(b):
+            b[k] = round(b[k] / n, 2)
+        b['unit'] = unit
+        b['samples'] = n
+
     return {
+        'prose': prose,
         'from': [d.get('file') for d in docs],
         'kinds': dict(kinds),
         'fonts': [f for f, _ in fonts.most_common()],
@@ -337,6 +477,40 @@ def check(produced, spec):
                 problems.append(('warn', base, 'size',
                                  f"point sizes not in the house ladder: {offs[:8]}"))
 
+        # --- prose: density and habit, the half people skip -------------------
+        pr, want = d.get('prose'), (spec.get('prose') or {}).get((d.get('prose') or {}).get('unit'))
+        if pr and want:
+            u = pr['unit']
+            wpu, wantwpu = pr['words_per_unit'], want.get('words_per_unit', 0)
+            if wantwpu >= 5:
+                if wpu > wantwpu * 2:
+                    problems.append(('warn', base, 'density',
+                        f"{wpu:.0f} words per {u} against a house average of {wantwpu:.0f} — more than twice as dense"))
+                elif wpu < wantwpu * 0.5:
+                    problems.append(('warn', base, 'density',
+                        f"{wpu:.0f} words per {u} against a house average of {wantwpu:.0f} — less than half as dense"))
+            ws, wants = pr['sentence_words_median'], want.get('sentence_words_median', 0)
+            # Needs both a ratio and an absolute gap, so a 3 -> 5 word wobble on a
+            # small sample stays quiet while 3 -> 31 does not.
+            if wants >= 2 and ws > max(wants * 1.6, wants + 6):
+                problems.append(('warn', base, 'sentences',
+                    f"median sentence is {ws:.0f} words against the house {wants:.0f}"))
+            pe, wantpe = pr['block_ends_with_period'], want.get('block_ends_with_period', 0)
+            if wantpe >= 0.7 and pe <= 0.3:
+                problems.append(('warn', base, 'punctuation', 'house blocks end in a full stop; these mostly do not'))
+            elif wantpe <= 0.3 and pe >= 0.7:
+                problems.append(('warn', base, 'punctuation', 'house blocks do not end in a full stop; these mostly do'))
+            for key, label in (('first_person_per_1k', 'first person'), ('second_person_per_1k', 'second person')):
+                if want.get(key, 0) < 1.0 and pr.get(key, 0) > 4.0:
+                    problems.append(('warn', base, 'voice',
+                        f"{label} appears {pr[key]:.0f}x per 1000 words; the samples barely use it"))
+            if want.get('exclamations', 0) == 0 and pr.get('exclamations', 0) > 0:
+                problems.append(('warn', base, 'voice', f"{pr['exclamations']} exclamation mark(s); the samples use none"))
+            hw, wanthw = pr['heading_words_median'], want.get('heading_words_median', 0)
+            if 0 < wanthw <= 4 and hw >= wanthw * 2.5:
+                problems.append(('warn', base, 'titles',
+                    f"headings run {hw:.0f} words against the house {wanthw:.0f} — the samples label, these assert"))
+
         if spec.get('named_styles') and d.get('styles') is not None:
             missing = [s for s in ('Heading1', 'Heading2', 'Title')
                        if s in spec['named_styles'] and s not in d['styles']]
@@ -358,6 +532,10 @@ def summarize(spec):
     if spec['layouts']:
         uniq = list(dict.fromkeys(spec['layouts']))
         lines.append(f"  layouts   {', '.join(uniq[:8])}{' …' if len(uniq) > 8 else ''}")
+    for unit, b in (spec.get('prose') or {}).items():
+        lines.append(f"  prose     {b['words_per_unit']:.0f} words/{unit} · sentence {b['sentence_words_median']:.0f} w "
+                     f"(p90 {b['sentence_words_p90']:.0f}) · {b['bullets_per_unit']:.1f} bullets/{unit} · "
+                     f"{b['block_ends_with_period']*100:.0f}% end in a full stop · headings {b['heading_words_median']:.0f} w")
     if spec['named_styles']:
         lines.append(f"  styles    {', '.join(spec['named_styles'][:10])}"
                      f"{' …' if len(spec['named_styles']) > 10 else ''}")

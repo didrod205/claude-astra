@@ -63,14 +63,18 @@ alone, and `.pdf` through PyMuPDF when it is installed. It reports:
 - **geometry** — page or slide dimensions, and margins where they are declared
 - **layouts** — slide layout names, which are the deck's actual vocabulary
 - **named styles** — Heading 1, Title, and the rest, with their font and size
+- **prose** — words per slide or page, sentence length, bullet count, whether
+  blocks end in a full stop, how long a heading runs, how much first and second
+  person appears
 
 The full JSON keeps a per-sample breakdown; the printed summary is the merged
 house style. `references/spec.md` explains each field and where it comes from.
 
 ## 2. What the extractor cannot see
 
-It gives you the visual system. It does not give you the writing. Read one or two
-samples properly and note, in the spec file or in your head:
+It measures the visual system and the *shape* of the writing — density, sentence
+length, punctuation convention, how assertive the titles are. What it cannot
+measure is what the writing is for. Read one or two samples and note:
 
 - **Sentence length and density.** Terse bullets or full prose paragraphs?
 - **Person and tense.** "We recommend" / "It is recommended" / "You should".
@@ -112,6 +116,11 @@ Exit 0 clean · 1 warnings · 2 off-style. It flags:
 | `color` | warn | a colour outside the palette (black and white exempt) |
 | `size` | warn | a point size off the ladder |
 | `styles` | warn | house named styles missing from the file |
+| `density` | warn | more than twice, or less than half, the house words per slide or page |
+| `sentences` | warn | median sentence far longer than the house |
+| `punctuation` | warn | fragments where the house writes sentences, or the reverse |
+| `voice` | warn | first or second person, or exclamation marks, the samples do not use |
+| `titles` | warn | headings that assert where the house labels |
 
 Warnings are often legitimate — a new accent for a callout, a size the samples
 happened not to contain. Errors rarely are. Judge them; do not suppress them

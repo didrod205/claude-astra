@@ -1,15 +1,44 @@
 # Reading the writing
 
-The extractor gives you the visual system. This is the other half, and it does
-not come out of a parser — you get it by reading two of the samples properly.
+The extractor gives you the visual system. This is the other half — and rather
+more of it comes out of a parser than people assume.
+
+## What is measured for you
+
+`style.py extract` reports a `prose` block per unit kind (slide or page), and
+`check` compares a finished file against it:
+
+```
+prose  9 words/slide · sentence 3 w (p90 3) · 3.0 bullets/slide
+       · 0% end in a full stop · headings 1 w
+```
+
+| measured | flagged when |
+|---|---|
+| **density** — words per slide or page | more than 2x, or less than half, the house average |
+| **sentence length** — median words, within a block | longer than 1.6x *and* six words above the house median |
+| **punctuation convention** — do blocks end in terminal punctuation | the house writes fragments and you wrote sentences, or the reverse |
+| **person** — first and second person per 1000 words | the samples barely use it and you used it freely |
+| **exclamations** | the samples use none and you used some |
+| **title style** — median words in a heading | the samples label in one or two words and yours assert in ten |
+
+That last pair is the one worth dwelling on. A deck whose slide titles read
+*"Q3 Revenue"* and a deck whose titles read *"We are delighted to report that
+third quarter revenue grew substantially"* are not the same house, and the
+difference is a number.
+
+Density is the constraint most likely to be quietly ignored, which is exactly
+why it is checked rather than described.
+
+## What still needs you to read the samples
+
+The numbers say how much and how long. They do not say what kind.
 
 ## What to look for
 
 Take one representative sample and answer these. Ten minutes, and it changes the
 output more than any colour value.
 
-**Sentence shape.** Average length. Do they run compound sentences or short
-declaratives? Are bullets fragments or full sentences — and are they punctuated?
 
 **Person and stance.** "We recommend", "It is recommended", "You should", or no
 agent at all. Whether the author appears.
@@ -17,9 +46,8 @@ agent at all. Whether the author appears.
 **How a section opens.** Claim first then support, or context first then claim?
 This is the most transferable structural habit in any house style.
 
-**Titles.** Labels ("Q3 Revenue") or assertions ("Q3 revenue fell on
-enterprise churn")? Assertive slide titles are a strong house signal and easy to
-get wrong in both directions.
+**Titles.** Labels or assertions? The word count tells you which; only reading
+tells you what a good one of theirs actually says.
 
 **Numbers.** Rounded to what? In the sentence, a table, or a chart? Is a number
 ever given without a comparison?
@@ -28,8 +56,6 @@ ever given without a comparison?
 more confidently than the house does reads as someone else wrote it, and so does
 writing less confidently.
 
-**Density.** Words per slide, per page. Count them on two samples rather than
-guessing — this is where generated documents drift most.
 
 **Furniture.** Does every deck open with an agenda and close with next steps? Is
 there a standing summary? Do sections have dividers? Does every page carry a
@@ -46,8 +72,7 @@ the spec is what makes the next document cheap.
 
 1. **Structure first, in their vocabulary.** For a deck, list the slides by
    layout name from the extracted layout list before writing a word.
-2. **Match density on purpose.** If their slides hold 30 words, write 30. This is
-   the constraint most likely to be quietly ignored.
+2. **Match density on purpose.** The spec gives you the number. Write to it.
 3. **Reuse their file as the template** where the format allows it. Starting from
    their document and replacing content preserves everything nobody measured.
 4. **Titles in their form.** If titles are assertions, every title is an
@@ -61,7 +86,7 @@ the spec is what makes the next document cheap.
 - [ ] warnings each either fixed or explained in the handover
 - [ ] rendered and looked at — the check cannot see a title overflowing its box,
       two elements colliding, or an unbalanced slide
-- [ ] density compared against a real sample, not estimated
+- [ ] density, sentence length and title length inside the spec's numbers
 - [ ] every number traceable to a source the user gave you
 - [ ] said plainly what you invented because the samples did not cover it
 

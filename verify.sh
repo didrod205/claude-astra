@@ -234,6 +234,39 @@ PY
     python3 house-style/scripts/style.py check "$TMP/drift.docx" --spec "$TMP/docx.json"
   expect 2 "pptx: off-house face, 16:9 geometry and off-ladder size are caught" -- \
     python3 house-style/scripts/style.py check "$TMP/drift.pptx" --spec "$TMP/pptx.json"
+
+  # Voice, not just colour: the same visual system written two different ways.
+  "$PYX" - "$TMP" <<'PY2'
+import sys
+from pptx import Presentation
+T = sys.argv[1]
+def deck(path, slides):
+    p = Presentation()
+    for title, bullets in slides:
+        s = p.slides.add_slide(p.slide_layouts[1])
+        s.shapes.title.text = title
+        tf = s.placeholders[1].text_frame; tf.text = bullets[0]
+        for b in bullets[1:]: tf.add_paragraph().text = b
+    p.save(path)
+deck(f'{T}/house.pptx', [
+ ("Q3 Revenue", ["Up 12% on Q2", "Enterprise led", "Churn flat"]),
+ ("Costs",      ["Headcount steady", "Cloud down 4%", "One-off legal"]),
+ ("Pipeline",   ["24 deals open", "Two above 1M", "Close rate 31%"])])
+deck(f'{T}/offvoice.pptx', [
+ ("We are delighted to report that third quarter revenue grew substantially",
+  ["We saw our revenue climb by twelve percent compared with the second quarter, which reflects the hard work of the whole team!",
+   "Our enterprise segment led the way once again, and we believe this momentum will continue into the fourth quarter.",
+   "We are pleased to note that churn remained flat across the period, which we attribute to our focus on customer success."])])
+PY2
+  python3 house-style/scripts/style.py extract "$TMP/house.pptx" -o "$TMP/house.json" >/dev/null 2>&1
+  expect 0 "prose: the house deck matches its own voice" -- \
+    python3 house-style/scripts/style.py check "$TMP/house.pptx" --spec "$TMP/house.json"
+  python3 house-style/scripts/style.py check "$TMP/offvoice.pptx" --spec "$TMP/house.json" >"$TMP/out" 2>&1
+  for k in density sentences punctuation voice titles; do
+    grep -q "\[$k\]" "$TMP/out" || { bad "prose check [$k] did not fire"; sed 's/^/        /' "$TMP/out" | tail -8; break; }
+  done
+  grep -q '\[density\]' "$TMP/out" && grep -q '\[titles\]' "$TMP/out" \
+    && ok "prose: an off-voice deck is caught on density, sentences, punctuation, person and titles" 
 else
   sk "docx/pptx checks — python-docx and python-pptx build the fixtures (pip install python-docx python-pptx)"
 fi

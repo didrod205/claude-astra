@@ -16,7 +16,28 @@ look at when two samples disagree.
 | `geometry` | `page_in` / `slide_in` / `margins_in` / `text_inset_in`, in inches |
 | `layouts` | slide layout names across all pptx samples |
 | `named_styles` | style ids across all docx samples |
+| `prose` | the measured writing habits, keyed by unit (`slide` / `page`) — see below |
 | `samples` | the per-file readings |
+
+## `prose`
+
+Kept per unit kind, because a deck's slide and a report's page are not
+comparable budgets. Text comes out of `word/document.xml`, `ppt/slides/*.xml` or
+the PDF's text layer; headings are the first paragraph of a slide, or a
+`Heading`/`Title` styled paragraph in a document.
+
+| field | is |
+|---|---|
+| `words_per_unit` | density — the number people ignore |
+| `sentence_words_median`, `..._p90` | measured *within* a block, so a deck of unpunctuated fragments does not read as one enormous sentence |
+| `bullets_per_unit` | |
+| `block_ends_with_period` | 0 = fragments, 1 = sentences. The convention, as a fraction |
+| `heading_words_median` | 1–2 is a label, 8+ is an assertion |
+| `first_person_per_1k`, `second_person_per_1k`, `hedges_per_1k` | |
+| `exclamations` | |
+
+Trust these at the medium level: they are real counts of real text, but a
+two-sample corpus gives a shaky median. Three samples is where they settle.
 
 ## Where each thing comes from
 
