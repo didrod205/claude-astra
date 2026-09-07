@@ -106,7 +106,9 @@ Exit 0 clean · 1 warnings · 2 something is not playable. What it checks:
 | `contract` | `__game` missing, or missing a method, or `state()` has no `status` |
 | `determinism` | two identical runs diverge. **Checked first** — every later check needs it |
 | `input` | an action in `actions` changes nothing. Skipped, and said to be skipped, if the run isn't deterministic |
-| `playable` | a random bot scores 0 over the whole run |
+| `playable` | a random bot scores 0 on every seed |
+| `balance` (warn) | scores swing more than 5x across seeds — the seed decides, not the player |
+| `depth` (warn) | a shallow lookahead player does no better than random |
 | `run` | `tick` never advances |
 | `design` (warn) | doing nothing forever never ends the game |
 | `perf` (warn) | over 400 ms per 1000 ticks — won't hold 60 fps |
@@ -115,7 +117,21 @@ Exit 0 clean · 1 warnings · 2 something is not playable. What it checks:
 **The random-bot score is the load-bearing check.** A bot pressing buttons at
 random should score *something* in a prototype humans can learn. Zero means the
 scoring is broken, or the game is unwinnable, or the input never reaches the
-simulation. Read `references/playtest.md` for how to act on each result.
+simulation.
+
+**The depth number is the interesting one.** Because the game is deterministic
+and seeded, the harness can ask what would have happened had it pressed something
+else — replay from the seed with a different next action — and so measure how
+much better a player who looks one step ahead does than one pressing at random:
+
+```
+a-beam    same seed: random 7 vs lookahead 11 (1.6x)   ← there is a decision here
+c-buoys   same seed: random 9 vs lookahead  9 (1.0x)   ← flagged
+```
+
+That is the question a prototyping pass exists to answer, and it is not
+answerable by playing the thing once. Read `references/playtest.md` for how to
+act on each result, and for the two very different reasons a 1.0x can appear.
 
 The `--out` screenshots are for you to look at, not proof of anything. The
 harness cannot see that the player sprite is behind the background.

@@ -2,7 +2,7 @@
 // Prove a prototype is actually playable — headlessly, without waiting for real
 // time, by driving the __game contract.
 //
-//   node scripts/playtest.mjs <file-or-dir> [more...] [--ticks 1800] [--out shots] [--json]
+//   node scripts/playtest.mjs <file-or-dir> [more...] [--ticks 1800] [--seeds 5] [--out shots] [--json]
 //
 // A directory is scanned one level deep for .html files, so one call playtests
 // every prototype in a batch.
@@ -14,13 +14,14 @@ import { resolve, dirname, basename, join, extname } from 'node:path';
 import { serve, launchChrome, CDP, instrument, goto } from './lib.mjs';
 
 const argv = process.argv.slice(2);
-const VALUED = new Set(['ticks', 'out']);
+const VALUED = new Set(['ticks', 'out', 'seeds']);
 const flag = (n, d) => { const i = argv.indexOf(`--${n}`); return i < 0 ? d : argv[i + 1]; };
 const positional = argv.filter((a, i) => {
   const prev = argv[i - 1];
   return !a.startsWith('--') && !(prev?.startsWith('--') && VALUED.has(prev.slice(2)));
 });
 const TICKS = +flag('ticks', 1800);
+const SEEDS = Math.max(1, +flag('seeds', 5));
 const OUT = flag('out', null);
 const asJson = argv.includes('--json');
 
@@ -64,6 +65,52 @@ const HARNESS = `window.__pt = (o) => {
   }
   hold(null);
   return JSON.stringify({ final: g.state(), best, over });
+};`;
+
+// A greedy player, built out of replays. The game is deterministic and seeded,
+// so "what happens if I press left here?" is answerable exactly: re-run from the
+// seed with the same prefix and a different next action. Comparing this against
+// random play measures the thing a prototype exists to find out — whether the
+// inputs carry a decision or the outcome is just the seed.
+const GREEDY = `window.__ptGreedy = (o) => {
+  const g = window.__game;
+  const acts = (g.actions || []).filter(a => a !== 'start' && a !== 'reset');
+  if (!acts.length) return JSON.stringify({ best: 0, unsupported: 'no actions' });
+  // Past the decision point the rollout keeps PLAYING, pseudo-randomly, rather
+  // than going silent — a turn-based game advances nothing without input, so a
+  // silent tail scores zero for every candidate and the comparison is empty.
+  // Every candidate shares the same tail, so they differ only by the decision.
+  const play = (script, ticks, H, tailSeed) => {
+    g.seed(o.seed); g.reset(); g.start();
+    let held = null, best = 0, over = null, ts = tailSeed | 0;
+    const rnd = () => { ts = (Math.imul(ts, 1664525) + 1013904223) | 0; return (ts >>> 0) / 4294967296; };
+    const hold = a => { if (held) g.input(held, false); held = a; if (a) g.input(a, true); };
+    for (let t = 0; t < ticks; t++) {
+      if (script[t] !== undefined) hold(script[t]);
+      else if (t % H === 0) hold(acts[Math.floor(rnd() * acts.length)]);
+      g.step(1);
+      const st = g.state() || {};
+      if (typeof st.score === 'number' && st.score > best) best = st.score;
+      if (st.status && st.status !== 'playing') { over = { tick: t, status: st.status }; break; }
+    }
+    hold(null);
+    return { best, over };
+  };
+  const H = o.horizon || 15;   // same cadence as the random bot, so the two compare
+  const script = {};
+  for (let t = 0; t < o.ticks; t += H) {
+    let pick = acts[0], bestVal = -Infinity;
+    for (const a of acts) {
+      script[t] = a;
+      const r = play(script, o.ticks, H, o.seed ^ 0x5bf03635);   // common tail across candidates
+      const val = r.best * 1000 + (r.over ? r.over.tick : o.ticks);
+      if (val > bestVal) { bestVal = val; pick = a; }
+    }
+    script[t] = pick;
+    if (play(script, t + H, H, o.seed ^ 0x5bf03635).over) break;
+  }
+  const f = play(script, o.ticks, H, o.seed ^ 0x5bf03635);
+  return JSON.stringify({ best: f.best, over: f.over, decisions: Object.keys(script).length });
 };`;
 
 const CONTRACT = `(() => {
@@ -162,11 +209,40 @@ try {
         stats.liveActions = playable.length - dead.length;
       }
 
-      // 5. a random bot can make progress
+      // 5. a random bot can make progress — sampled across seeds, because one
+      //    seed tells you about one run and nothing about the game.
       const bot = await run({ seed: 2024, ticks: TICKS, mode: 'bot', stopOnEnd: true });
-      stats.botScore = bot.best;
-      stats.botEnd = bot.over ? `${bot.over.status} @ tick ${bot.over.tick}` : `survived ${TICKS}`;
-      if (bot.best === 0) add('error', 'playable', `a random bot scored 0 in ${TICKS} ticks — unwinnable, or scoring is broken`);
+      const seeds = [{ score: bot.best, end: bot.over ? bot.over.tick : TICKS }];
+      for (let i = 1; i < SEEDS; i++) {
+        const r = await run({ seed: 2024 + i * 7919, ticks: TICKS, mode: 'bot', stopOnEnd: true });
+        seeds.push({ score: r.best, end: r.over ? r.over.tick : TICKS });
+      }
+      const scores = seeds.map(s => s.score).sort((a, b) => a - b);
+      const med = scores[scores.length >> 1];
+      stats.botScore = med;
+      stats.botRange = [scores[0], scores[scores.length - 1]];
+      stats.botEnd = `median end @ ${seeds.map(s => s.end).sort((a, b) => a - b)[seeds.length >> 1]}`;
+      if (scores[scores.length - 1] === 0)
+        add('error', 'playable', `a random bot scored 0 on all ${SEEDS} seeds in ${TICKS} ticks — unwinnable, or scoring is broken`);
+      else if (med === 0)
+        add('warn', 'playable', `a random bot scored 0 on most seeds (range ${scores[0]}–${scores[scores.length - 1]}) — the floor may be too high`);
+      if (med > 0 && scores[scores.length - 1] > med * 5)
+        add('warn', 'balance', `scores across seeds range ${scores[0]}–${scores[scores.length - 1]} around a median of ${med} — the seed decides more than the player does`);
+
+      // 6. does playing WELL beat playing at random? This is the prototype question.
+      if (deterministic && playable.length) {
+        await cdp.eval(GREEDY, { awaitPromise: false });
+        const gTicks = Math.min(TICKS, 900);
+        const gr = JSON.parse(await cdp.eval(`window.__ptGreedy(${JSON.stringify({ seed: 2024, ticks: gTicks, horizon: 30 })})`, { awaitPromise: false }));
+        const rnd = await run({ seed: 2024, ticks: gTicks, mode: 'bot', stopOnEnd: true });
+        stats.greedy = gr.best; stats.randomAt = rnd.best; stats.gradientTicks = gTicks;
+        const grad = rnd.best > 0 ? gr.best / rnd.best : (gr.best > 0 ? Infinity : 1);
+        stats.gradient = grad;
+        if (gr.best <= rnd.best)
+          add('warn', 'depth', `a shallow lookahead player did not beat random on the same seed (${gr.best} vs ${rnd.best}) — either the inputs carry no decision, or the payoff is slower than a 15-tick lookahead can see`);
+        else if (grad < 1.25)
+          add('warn', 'depth', `playing well is barely better than random (${gr.best} vs ${rnd.best}, ${grad.toFixed(2)}x on the same seed) — thin as a game`);
+      }
 
       // Now the idle run can be judged. Idle advancing nothing while the bot run
       // does is the signature of a turn-based game — the documented pattern, not
@@ -217,13 +293,15 @@ const warned = results.filter(r => !r.problems.some(p => p.level === 'error') &&
 
 if (asJson) console.log(JSON.stringify({ ok: !broken.length, results }, null, 2));
 else {
-  console.log(`\nplaytest — ${results.length} prototype(s), ${TICKS} ticks each\n`);
+  console.log(`\nplaytest — ${results.length} prototype(s), ${TICKS} ticks, ${SEEDS} seeds\n`);
   for (const r of results) {
     const errs = r.problems.filter(p => p.level === 'error');
     const mark = errs.length ? 'x' : r.problems.length ? '!' : 'ok';
     const s = r.stats;
     const line = s.botScore !== undefined
-      ? `bot scored ${s.botScore}, ${s.botEnd} · ${s.liveActions === null ? '?' : s.liveActions ?? 0}/${s.playableActions ?? 0} actions live · ${s.msPer1000Ticks ?? '?'} ms/1000t${s.turnBased ? ' · turn-based' : ''}`
+      ? `random ${s.botScore} (${s.botRange?.join('–') ?? '?'} over ${SEEDS} seeds)` +
+        (s.greedy != null ? ` · same seed: random ${s.randomAt} vs lookahead ${s.greedy} (${s.gradient === Infinity ? '∞' : s.gradient.toFixed(1)}x)` : '') +
+        ` · ${s.liveActions === null ? '?' : s.liveActions ?? 0}/${s.playableActions ?? 0} actions live · ${s.msPer1000Ticks ?? '?'} ms/1000t${s.turnBased ? ' · turn-based' : ''}`
       : 'did not reach the play checks';
     console.log(`  ${mark.padEnd(3)} ${r.name.padEnd(22)} ${line}`);
     for (const p of r.problems) console.log(`        ${p.level === 'error' ? 'x' : '!'} [${p.check}] ${p.msg}`);

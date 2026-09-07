@@ -3,7 +3,7 @@
 ```bash
 node scripts/playtest.mjs prototypes/           # a whole directory
 node scripts/playtest.mjs a.html b.html         # named files
-node scripts/playtest.mjs prototypes/ --ticks 4000 --out shots --json
+node scripts/playtest.mjs prototypes/ --ticks 4000 --seeds 9 --out shots --json
 ```
 
 A directory is scanned one level deep, so both `prototypes/*.html` and
@@ -21,10 +21,56 @@ For every prototype, in this order:
 4. **Determinism** — the same 400-tick scripted session twice, compared exactly.
 5. **Dead inputs** — for each action, 120 ticks holding it vs 120 ticks idle from
    the same seed. Identical end state means the action does nothing.
-6. **Bot run** — `--ticks` (default 1800) of random play, changing action every
-   15 ticks, recording the best score and how it ended.
-7. **Speed** — 3000 ticks, reported as ms per 1000.
-8. **Screenshots** at menu and after 240 ticks of play, if `--out` is given.
+6. **Bot run, across seeds** — `--seeds` (default 5) runs of `--ticks` (default
+   1800) random play, changing action every 15 ticks. Reports the median score
+   and the range.
+7. **Depth** — how much better a *shallow lookahead player* does than the random
+   one on the same seed. See below; this is the interesting number.
+8. **Speed** — 3000 ticks, reported as ms per 1000.
+9. **Screenshots** at menu and after 240 ticks of play, if `--out` is given.
+
+## The depth number
+
+```
+ok  a-beam   random 12 (7–13 over 5 seeds) · same seed: random 7 vs lookahead 11 (1.6x)
+```
+
+Because a prototype is deterministic and seeded, *"what if I had pressed left
+instead"* has an exact answer: replay from the seed with the same prefix and a
+different next action. The harness does that at every decision point, keeps the
+best action, and plays the rest of the run pseudo-randomly — with the **same
+random tail for every candidate**, so two candidates differ only by the decision
+being weighed.
+
+Comparing that player against the random one measures the question a prototyping
+pass exists to answer: **is there a decision here, or is the outcome just the
+seed?**
+
+| reading | means |
+|---|---|
+| **1.5x and up** | inputs carry real decisions. Worth developing |
+| **1.2–1.5x** | thin but present |
+| **≤ 1.0x** | flagged. A shallow lookahead did not beat random |
+
+The last one has two causes and the harness cannot tell them apart, so the
+warning names both: either the inputs genuinely carry no decision, or **the
+payoff is slower than a 15-tick lookahead can see** — true of placement and
+build-then-watch games, where the decisions are front-loaded and need several
+moves of planning. Read it as a prompt to think, not a verdict.
+
+The lookahead is a floor, not an optimal player. A game can have depth it does
+not find. It cannot have less depth than it finds.
+
+## The seed range
+
+```
+random 14 (12–14 over 5 seeds)      ← tight: the player is what varies
+random 5  (2–9 over 5 seeds)        ← wide: the seed is doing a lot of the work
+```
+
+A spread wider than about 5x the median is flagged: the run is being decided by
+what the RNG hands you rather than by how you play. That is a balance problem,
+and it is invisible from one playthrough.
 
 ## Acting on each result
 
@@ -44,6 +90,12 @@ Grep the action name; it should appear in both.
 
 **`input: dead-input check skipped`** — a consequence of the determinism failure,
 not a separate problem. It comes back once the run is reproducible.
+
+**`balance: scores across seeds range ... — the seed decides more than the player
+does`** — one run told you nothing. Look at what varies between seeds: a spawn
+that is sometimes impossible, a first wave that is sometimes free.
+
+**`depth: a shallow lookahead player did not beat random`** — see above.
 
 **`playable: a random bot scored 0`** — the important one. Work through:
 - Does `state().score` actually update, or is the score only in a DOM element?

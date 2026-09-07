@@ -115,6 +115,27 @@ HTML
 expect 0 "playtest accepts a turn-based prototype that idles without advancing" -- \
   node playable-prototype/scripts/playtest.mjs "$TMP/turn" --ticks 900
 
+# Inputs that change the world but never change the outcome: a prototype with
+# no decision in it. The lookahead player cannot beat random, and that is the
+# thing a prototyping pass most needs told.
+mkdir -p "$TMP/nodepth"
+cat > "$TMP/nodepth/nodepth.html" <<'HTML'
+<!doctype html><meta charset=utf-8><canvas></canvas><script>
+let G={status:'menu',tick:0,score:0,x:0},held={};
+window.__game={actions:['left','right','start'],
+ state:()=>({status:G.status,tick:G.tick,score:G.score,x:G.x}),
+ input(a,d){if(a==='start'){if(d&&G.status!=='playing')this.start();}else held[a]=d;},
+ start(){G={status:'playing',tick:0,score:0,x:0};},
+ reset(){G={status:'menu',tick:0,score:0,x:0};for(const k in held)held[k]=false;},seed(n){},
+ step(n=1){for(let i=0;i<n;i++){ if(G.status!=='playing')continue; G.tick++;
+   if(held.left)G.x--; if(held.right)G.x++;      // moves, but nothing depends on it
+   if(G.tick%30===0)G.score++;                   // score arrives on its own
+   if(G.tick>=600)G.status='over'; }}};
+</script>
+HTML
+node playable-prototype/scripts/playtest.mjs "$TMP/nodepth" --ticks 600 --seeds 3 >"$TMP/out" 2>&1
+grep -q '\[depth\]' "$TMP/out" && ok "playtest flags a prototype whose inputs carry no decision" || { bad "depth check did not fire"; sed 's/^/        /' "$TMP/out" | tail -6; }
+
 # ---------------------------------------------------------------- frontend-qa
 head_ "frontend-qa"
 mkdir -p "$TMP/clean" "$TMP/flawed"
