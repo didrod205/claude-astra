@@ -292,6 +292,29 @@ async function boot() {
 
   window.__thaw = () => { frozen = false; hud.style.display = ''; };
 
+  /** Hide everything sitting entirely above `y`, so a top-down shot cuts through
+   *  the building instead of photographing its roof. The single most useful
+   *  view of any enclosed interior. __clipReset() puts it back. */
+  window.__clipAbove = (y) => {
+    let hidden = 0;
+    scene.traverse(n => {
+      if (!n.isMesh || !n.userData?.__manifest) return;
+      if (n.userData.__clipOrig === undefined) n.userData.__clipOrig = n.visible;
+      const hide = new THREE.Box3().setFromObject(n).min.y >= y;
+      n.visible = hide ? false : n.userData.__clipOrig;
+      if (hide) hidden++;
+    });
+    renderer.render(scene, camera);
+    return hidden;
+  };
+
+  window.__clipReset = () => {
+    scene.traverse(n => {
+      if (n.userData?.__clipOrig !== undefined) n.visible = n.userData.__clipOrig;
+    });
+    renderer.render(scene, camera);
+  };
+
   const boxOf = b => ({
     min: b.min.toArray(), max: b.max.toArray(),
     size: b.getSize(new THREE.Vector3()).toArray(),

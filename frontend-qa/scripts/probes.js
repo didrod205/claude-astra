@@ -23,7 +23,7 @@
     (el.textContent || '').trim() ||
     (el.value || '').trim();
 
-  const out = { overflow: [], images: [], controls: [], labels: [], headings: [], targets: [], dupIds: [], deadLinks: [] };
+  const out = { overflow: [], clipped: [], images: [], controls: [], labels: [], headings: [], targets: [], dupIds: [], deadLinks: [] };
 
   // 1. Horizontal overflow — the body must never scroll sideways.
   const vw = document.documentElement.clientWidth;
@@ -38,6 +38,20 @@
     out.overflow.sort((a, b) => a.w - b.w);
     out.overflow = out.overflow.slice(0, 8);
     if (!out.overflow.length) out.overflow.push({ el: '(unidentified)', right: document.documentElement.scrollWidth, over: document.documentElement.scrollWidth - vw, w: 0 });
+  }
+
+  // 1b. Content that sticks out of the viewport but produces NO scrollbar.
+  // Centred overflow (flex/grid `place-content:center`, `margin:auto`) is clipped
+  // on both sides instead of scrollable, so scrollWidth never grows and check 1
+  // sees nothing — while the user genuinely cannot reach the content.
+  for (const el of document.querySelectorAll('body *')) {
+    if (!vis(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > vw + 1 || r.left < -1) {
+      if (el.querySelector(':scope > *') && [...el.children].some(c => vis(c) && c.getBoundingClientRect().width > vw + 1)) continue;
+      out.clipped.push({ el: where(el), w: Math.round(r.width), left: Math.round(r.left), right: Math.round(r.right) });
+      if (out.clipped.length > 6) break;
+    }
   }
 
   // 2. Images: broken, and missing alt.
@@ -94,6 +108,18 @@
     if (href === null || href === '' || href === '#')
       out.deadLinks.push({ el: where(a), text: (a.textContent || '').trim().slice(0, 40), href });
   }
+
+  // 9. The viewport meta. Without width=device-width a phone lays the page out
+  // at ~980px and scales it down, so the site is unreadable AND every width-based
+  // measurement above is taken in a 980px viewport that does not exist on screen.
+  const vp = document.querySelector('meta[name="viewport" i]');
+  out.viewport = {
+    present: !!vp,
+    content: vp ? vp.getAttribute('content') : null,
+    deviceWidth: !!vp && /width\s*=\s*device-width/i.test(vp.getAttribute('content') || ''),
+    layoutWidth: vw,
+    screenWidth: window.screen.width,
+  };
 
   out.stats = {
     title: document.title,

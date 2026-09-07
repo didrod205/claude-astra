@@ -48,6 +48,7 @@ bounding box. Parent/child pairs are exempt.
 ```bash
 node scripts/shot.mjs scene/ --out shots [--w 1280] [--h 800]
 node scripts/shot.mjs scene/ --pose 3,1.7,2@0,1.6,-4      # a specific viewpoint
+node scripts/shot.mjs scene/ --plan 2.6 --plan 5.4        # cutaway plan per storey
 node scripts/shot.mjs scene/ --only spawn                  # just the arrival shot
 ```
 
@@ -57,11 +58,34 @@ Default set — **read all six**:
 |---|---|
 | `spawn` | what the user actually sees first. Scale, framing, whether anything is worth walking to |
 | `orbit-0/90/180/270` | the sides you did not think about. Missing back walls, hollow buildings, props floating beside the model rather than in it |
-| `top` | **the highest-value image.** Overlaps, rooms that don't tile, a footprint that isn't the shape you thought, furniture in the walls |
+| `top` | the footprint and the site. **On a roofed building it shows a roof and nothing else** — use `--plan` for those |
 
 Framing ignores terrain-sized ground slabs, so a 6 m cabin on a 60 m lawn frames
 on the cabin. Poses are computed from the subject bounds every run, so they stay
 correct as the scene grows.
+
+### `--plan` — the only view of an interior
+
+```bash
+node scripts/shot.mjs scene/ --out shots --plan 2.6 --plan 5.4
+```
+
+Hides everything sitting entirely above the cut and shoots straight down. **For
+anything enclosed — a house, a room, a level — this is the highest-value image
+of the set, and none of the other six can substitute for it.** A roofed building
+is opaque from every external angle: the six default shots of a two-storey
+townhouse showed four brick elevations and a roof, and revealed nothing about the
+stairs, the stairwell opening, or a single piece of furniture inside it. One
+`--plan` cut showed all of it.
+
+Pass one cut per storey, just under that storey's ceiling — for a house with
+floors at 0.15 and 3.0 and a 2.6 m storey height, `--plan 2.6 --plan 5.4`. The
+result names the file after the height and reports how many objects it hid, which
+is a quick sanity check in itself: hiding 0 means your cut is above everything.
+
+Read a plan for: rooms that don't tile, furniture inside walls, a stairwell
+opening that doesn't line up with the stairs, circulation you cannot actually
+walk through, and a footprint that isn't the shape you thought.
 
 ### Reading the images
 

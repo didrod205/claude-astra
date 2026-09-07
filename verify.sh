@@ -49,6 +49,9 @@ expect 2 "audit fails a scene with the player trapped in geometry" -- \
 node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn >/dev/null 2>&1
 [ -s "$TMP/shots/spawn.png" ] && ok "shot.mjs renders a frame headlessly" || bad "shot.mjs produced no image"
 
+node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn --plan 1.5 >/dev/null 2>&1
+[ -s "$TMP/shots/plan-1_5.png" ] && ok "--plan cuts through the roof for an interior view" || bad "--plan produced no image"
+
 node walkable-3d/scripts/export-glb.mjs walkable-3d/assets/template --out "$TMP/scene.glb" >/dev/null 2>&1
 if node -e '
   const fs=require("fs"),b=fs.readFileSync(process.argv[1]);
@@ -81,6 +84,25 @@ HTML
 expect 2 "playtest rejects a prototype with no API and one that is non-deterministic" -- \
   node playable-prototype/scripts/playtest.mjs "$TMP/proto" --ticks 600
 
+# A turn-based game advances nothing while no move is pending. That is the
+# documented pattern, and the harness used to fail it.
+mkdir -p "$TMP/turn"
+cat > "$TMP/turn/turn.html" <<'HTML'
+<!doctype html><meta charset=utf-8><canvas></canvas><script>
+let G={status:'menu',tick:0,score:0,at:0},pending=null;
+window.__game={actions:['fwd','back','start'],
+ state:()=>({status:G.status,tick:G.tick,score:G.score,at:G.at}),
+ input(a,d){if(!d)return;if(a==='start'){if(G.status!=='playing')this.start();}else pending=a;},
+ start(){G={status:'playing',tick:0,score:0,at:0};pending=null;},
+ reset(){G={status:'menu',tick:0,score:0,at:0};pending=null;},seed(n){},
+ step(n=1){for(let i=0;i<n;i++){ if(G.status!=='playing'||!pending)continue;
+   const a=pending;pending=null;G.tick++;
+   G.at+=(a==='fwd'?1:-1); if(G.at>=3){G.score++;G.at=0;} if(G.at<=-6)G.status='over'; }}};
+</script>
+HTML
+expect 0 "playtest accepts a turn-based prototype that idles without advancing" -- \
+  node playable-prototype/scripts/playtest.mjs "$TMP/turn" --ticks 900
+
 # ---------------------------------------------------------------- frontend-qa
 head_ "frontend-qa"
 mkdir -p "$TMP/clean" "$TMP/flawed"
@@ -90,6 +112,13 @@ expect 0 "sweep passes a clean page" -- \
   node frontend-qa/scripts/qa-run.mjs "$TMP/clean" --out "$TMP/qa1" --widths 1440
 expect 2 "sweep catches console errors, overflow, broken images and duplicate ids" -- \
   node frontend-qa/scripts/qa-run.mjs "$TMP/flawed" --out "$TMP/qa2" --widths 390,1440
+
+# No viewport meta means the phone lays the page out at ~980px and every other
+# width measurement in the report is taken in a viewport that isn't on screen.
+mkdir -p "$TMP/novp"
+printf '%s' '<!doctype html><meta charset=utf-8><title>No viewport</title><style>body{margin:0;font:16px system-ui}</style><h1>Hi</h1><p>No viewport meta here.</p>' > "$TMP/novp/index.html"
+node frontend-qa/scripts/qa-run.mjs "$TMP/novp" --out "$TMP/qa3" --widths 390 >"$TMP/out" 2>&1
+grep -q 'viewport' "$TMP/out" && ok "sweep flags a page with no viewport meta" || { bad "viewport check did not fire"; sed 's/^/        /' "$TMP/out" | tail -5; }
 
 # ---------------------------------------------------------------- house-style
 head_ "house-style ${D}(style.py runs on the standard library alone)${Z}"

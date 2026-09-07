@@ -3,6 +3,7 @@
 //
 //   node scripts/shot.mjs <sceneDir> [--out shots] [--w 1280] [--h 800]
 //                         [--pose x,y,z@lx,ly,lz]...   (repeatable; overrides auto poses)
+//                         [--plan <y>]...              (repeatable; cutaway plan at that height)
 //                         [--only spawn|orbit|top]
 //
 // Default poses = spawn + 4 orbit corners + 1 top-down. One angle is never enough:
@@ -17,7 +18,7 @@ const argv = process.argv.slice(2);
 const flag = (n, d) => { const i = argv.indexOf(`--${n}`); return i < 0 ? d : argv[i + 1]; };
 const many = n => argv.reduce((a, v, i) => (v === `--${n}` ? [...a, argv[i + 1]] : a), []);
 
-const FLAGS_WITH_VALUE = new Set(['out', 'w', 'h', 'pose', 'only']);
+const FLAGS_WITH_VALUE = new Set(['out', 'w', 'h', 'pose', 'only', 'plan']);
 const positional = argv.filter((a, i) => {
   const prev = argv[i - 1];
   return !a.startsWith('--') && !(prev?.startsWith('--') && FLAGS_WITH_VALUE.has(prev.slice(2)));
@@ -72,6 +73,7 @@ try {
 
   await mkdir(out, { recursive: true });
   const written = [];
+  const planCuts = many('plan').map(Number).filter(v => Number.isFinite(v));
   for (const p of poses) {
     await cdp.eval(`window.__setCamera(${JSON.stringify({ position: p.position, lookAt: p.lookAt })})`);
     await new Promise(r => setTimeout(r, 120));
@@ -79,6 +81,22 @@ try {
     const file = resolve(out, `${p.name}.png`);
     await writeFile(file, Buffer.from(data, 'base64'));
     written.push(file);
+  }
+
+  // Cutaway plans. A roofed building is opaque from every one of the six poses;
+  // this is the only view that shows the interior you actually built.
+  for (const y of planCuts) {
+    const hidden = await cdp.eval(`window.__clipAbove(${y})`);
+    const h = Math.max(b.size[0], b.size[2]) * 1.05;
+    await cdp.eval(`window.__setCamera(${JSON.stringify({
+      position: [cx, y + h, cz + 0.01], lookAt: b.center })})`);
+    await new Promise(r => setTimeout(r, 120));
+    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+    const file = resolve(out, `plan-${String(y).replace('.', '_')}.png`);
+    await writeFile(file, Buffer.from(data, 'base64'));
+    written.push(file);
+    console.log(`  (plan at y=${y}: hid ${hidden} object(s) above the cut)`);
+    await cdp.eval(`window.__clipReset()`);
   }
 
   console.log(`\nscene ${basename(dir)} — bounds ${b.size.map(v => v.toFixed(1)).join(' × ')} m\n`);

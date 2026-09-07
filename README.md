@@ -47,7 +47,7 @@ the layout names, and diffs the finished file back against them.
 
 ## Verified
 
-`./verify.sh` reproduces every claim below. 14 checks, no arguments, no setup —
+`./verify.sh` reproduces every claim below. 17 checks, no arguments, no setup —
 it builds its own fixtures in a temp directory and cleans up after itself.
 
 ```
@@ -55,13 +55,16 @@ walkable-3d
   ok    audit passes on the bundled scene
   ok    audit fails a scene with the player trapped in geometry
   ok    shot.mjs renders a frame headlessly
+  ok    --plan cuts through the roof for an interior view
   ok    glTF export keeps object names and parenting
 playable-prototype
   ok    the bundled game passes the playtest
   ok    playtest rejects a prototype with no API and one that is non-deterministic
+  ok    playtest accepts a turn-based prototype that idles without advancing
 frontend-qa
   ok    sweep passes a clean page
   ok    sweep catches console errors, overflow, broken images and duplicate ids
+  ok    sweep flags a page with no viewport meta
 house-style
   ok    pdf: the reference matches its own spec
   ok    pdf: a drifted file is caught on face, colour and size
@@ -108,7 +111,25 @@ the skill, three of them claims that were simply wrong:
 The two apps are now written up as verified profiles in
 [`references/app-profiles.md`](desktop-app-driver/references/app-profiles.md).
 
-The one bug this suite was written after finding: the size-ladder check silently
+Dogfooding the three generation loops — authoring a two-storey townhouse from a
+brief, spinning three lighthouse prototypes out of one idea, and sweeping them —
+found four more defects, each now pinned by a check above:
+
+- The six default 3D shots **cannot see inside a roofed building**, and the docs
+  called the top-down "the highest-value image" while it showed a roof. `--plan`
+  cuts through at a given height; one cut revealed the stairs, the stairwell
+  opening and the furniture that four brick elevations had hidden.
+- The playtest failed a **turn-based** prototype for "tick never advanced" —
+  contradicting the turn-based pattern its own reference documents. Determinism
+  and the bot run now decide that verdict, not the idle run.
+- A page with **no `<meta name="viewport">`** was swept clean at 390px. A phone
+  lays such a page out at ~980px and scales it down, so nothing overflowed —
+  the missing tag was masking every responsive finding. Adding the check turned
+  one silent pass into a correct "overflows by 35px".
+- Passing a directory with no `index.html` produced a confusing 404 report
+  instead of saying so.
+
+The one bug the suite was originally written after finding: the size-ladder check silently
 skipped `.docx` and `.pptx`, because those formats declare point sizes per run
 rather than in a styles part, so a 19pt heading in a 12pt house passed clean.
 Real-file testing found it; the last two lines above are what now catches it.
@@ -127,7 +148,7 @@ Or point Claude Code at the checkout and invoke a skill by name.
 ## Try it
 
 ```bash
-./verify.sh          # all 14 checks, ~2 minutes
+./verify.sh          # all 17 checks, ~3 minutes
 ```
 
 Walk the bundled 3D scene — click the page, then WASD; `G` exports a `.glb`:

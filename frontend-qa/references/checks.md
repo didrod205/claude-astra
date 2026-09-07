@@ -8,7 +8,9 @@ warnings mean look.
 
 | check | threshold | what it means |
 |---|---|---|
+| `viewport` | mobile widths only: no `<meta name="viewport">`, or one without `width=device-width` | **fix this before reading anything else about mobile.** A phone lays such a page out at ~980px and scales it down: the site is unreadable, and every width-based check below was measured in a 980px viewport that does not exist on screen. A 460px element in a "390px" run reports no overflow, because the run was really 980px wide |
 | `console` | any `console.error` or uncaught exception | the page is throwing. Fix before anything else — downstream flows fail for unrelated reasons |
+| `clipped` | content wider than the viewport that produces no scrollbar | centred overflow (`place-content:center`, `margin:auto`) is cut off on both sides rather than scrollable, so `scrollWidth` never grows and the `overflow` check cannot see it |
 | `network` | any failed request, or HTTP ≥ 400 | a missing asset or a broken endpoint. `favicon.ico` is filtered out |
 | `overflow` | `documentElement.scrollWidth > clientWidth + 1` | the body scrolls sideways. The narrowest overflowing element is named — that's the culprit, not its stretched ancestors |
 | `image` | `naturalWidth === 0` after load | broken `src`, wrong path, or a blocked host |
@@ -26,6 +28,18 @@ warnings mean look.
 | `link` | `href` missing, empty, or `#` | either a real dead link or a button wearing an anchor |
 | `touch` | tap target under 44×44 CSS px | **mobile widths only** (< 500px) |
 | `meta` | no `<title>` | |
+
+## Read the findings in this order
+
+Two of these checks invalidate the others when they fire, so the report is not a
+flat list:
+
+1. **`viewport`** — until the page declares `width=device-width`, no mobile
+   measurement in the report means what it says.
+2. **`console`** — a page throwing on load fails flows for reasons unrelated to
+   the flow.
+
+Everything else can be read in any order.
 
 ## What it cannot see
 

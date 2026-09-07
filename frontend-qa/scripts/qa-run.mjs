@@ -41,6 +41,10 @@ if (!/^https?:\/\//.test(target)) {
   const st = await stat(p).catch(() => null);
   if (!st) { console.error(`no such path: ${p}`); process.exit(66); }
   const root = st.isDirectory() ? p : dirname(p);
+  if (st.isDirectory() && !(await stat(join(p, 'index.html')).catch(() => null))) {
+    console.error(`${p} has no index.html — pass the .html file you want swept, or a URL.`);
+    process.exit(66);
+  }
   server = await serve(root);
   url = `http://127.0.0.1:${server.port}/${st.isDirectory() ? '' : p.slice(root.length + 1)}`;
 }
@@ -93,7 +97,18 @@ for (const r of runs) {
   for (const f of r.log.failed.filter(f => !/favicon\.ico/.test(f.url ?? '')).slice(0, 10))
     add('error', w, 'network', `${f.text} ${f.url ?? ''}`.trim().slice(0, 200));
 
+  // Report this first: without it the page is unreadable on a phone, and every
+  // other width-based finding below was measured in a viewport that isn't real.
+  if (w < 500 && p.viewport) {
+    if (!p.viewport.present)
+      add('error', w, 'viewport', `no <meta name="viewport"> — the phone lays this out at ${p.viewport.layoutWidth}px and scales it down`);
+    else if (!p.viewport.deviceWidth)
+      add('error', w, 'viewport', `viewport meta has no width=device-width (content="${p.viewport.content}") — laid out at ${p.viewport.layoutWidth}px`);
+  }
+
   if (p.overflow.length) add('error', w, 'overflow', `page scrolls sideways: ${cap(p.overflow, 4, o => `${o.el} +${o.over}px`)}`);
+  if (p.clipped.length && !p.overflow.length)
+    add('error', w, 'clipped', `wider than the viewport with no way to scroll to it: ${cap(p.clipped, 4, c => `${c.el} ${c.w}px in ${p.stats.viewport}px`)}`);
   for (const i of p.images.filter(i => i.issue === 'broken')) add('error', w, 'image', `broken: ${i.el} ${i.src}`);
   for (const d of p.dupIds) add('error', w, 'dom', `duplicate id "${d.id}" x${d.count}`);
 

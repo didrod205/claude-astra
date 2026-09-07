@@ -123,14 +123,13 @@ try {
       await cdp.eval(HARNESS, { awaitPromise: false });
       const run = async o => JSON.parse(await cdp.eval(`window.__pt(${JSON.stringify(o)})`, { awaitPromise: false }));
 
-      // 2. it starts and time moves
-      const idle = await run({ seed: 12345, ticks: Math.min(TICKS, 600), mode: 'idle', stopOnEnd: false });
+      // 2. it starts and time moves. A turn-based game legitimately advances
+      //    nothing while no move is pending, so the verdict waits for the bot run.
+      const idleTicks = Math.min(TICKS, 1200);
+      const idle = await run({ seed: 12345, ticks: idleTicks, mode: 'idle', stopOnEnd: false });
       if (!idle.final) add('error', 'run', 'state() returned nothing after a run');
-      else {
-        if ((idle.final.tick ?? 0) === 0) add('error', 'run', 'tick never advanced — step() does not drive the simulation');
-        stats.idleEnd = idle.over ? `${idle.over.status} @ tick ${idle.over.tick}` : 'never ended';
-        if (!idle.over) add('warn', 'design', 'doing nothing for 600 ticks never ends the game — is there a lose condition?');
-      }
+      stats.idleTick = idle.final?.tick ?? 0;
+      stats.idleEnd = idle.over ? `${idle.over.status} @ tick ${idle.over.tick}` : 'never ended';
 
       // 3. deterministic — checked first, because every later comparison
       //    depends on two identical runs being identical.
@@ -168,6 +167,16 @@ try {
       stats.botScore = bot.best;
       stats.botEnd = bot.over ? `${bot.over.status} @ tick ${bot.over.tick}` : `survived ${TICKS}`;
       if (bot.best === 0) add('error', 'playable', `a random bot scored 0 in ${TICKS} ticks — unwinnable, or scoring is broken`);
+
+      // Now the idle run can be judged. Idle advancing nothing while the bot run
+      // does is the signature of a turn-based game — the documented pattern, not
+      // a fault. Only when neither advances is the simulation actually dead.
+      const botTick = bot.final?.tick ?? 0;
+      stats.turnBased = stats.idleTick === 0 && botTick > 0;
+      if (stats.idleTick === 0 && botTick === 0)
+        add('error', 'run', 'tick never advanced in either run — step() does not drive the simulation');
+      else if (!stats.turnBased && !idle.over)
+        add('warn', 'design', `doing nothing for ${idleTicks} ticks never ends the game — is there a lose condition?`);
 
       // 6. speed
       const t0 = Date.now();
@@ -214,7 +223,7 @@ else {
     const mark = errs.length ? 'x' : r.problems.length ? '!' : 'ok';
     const s = r.stats;
     const line = s.botScore !== undefined
-      ? `bot scored ${s.botScore}, ${s.botEnd} · ${s.liveActions === null ? '?' : s.liveActions ?? 0}/${s.playableActions ?? 0} actions live · ${s.msPer1000Ticks ?? '?'} ms/1000t`
+      ? `bot scored ${s.botScore}, ${s.botEnd} · ${s.liveActions === null ? '?' : s.liveActions ?? 0}/${s.playableActions ?? 0} actions live · ${s.msPer1000Ticks ?? '?'} ms/1000t${s.turnBased ? ' · turn-based' : ''}`
       : 'did not reach the play checks';
     console.log(`  ${mark.padEnd(3)} ${r.name.padEnd(22)} ${line}`);
     for (const p of r.problems) console.log(`        ${p.level === 'error' ? 'x' : '!'} [${p.check}] ${p.msg}`);

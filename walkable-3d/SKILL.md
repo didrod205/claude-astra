@@ -53,7 +53,8 @@ It also means iteration is a JSON edit, not a code rewrite. When the user says
 2. Lay out on paper first — a metre grid, room by room. references/scale.md
 3. Write scene.json.
 4. node scripts/audit.mjs <dir>          ← structural truth. Fix every error.
-5. node scripts/shot.mjs <dir> --out shots   ← 6 angles. Read ALL of them.
+5. node scripts/shot.mjs <dir> --out shots --plan <y per storey>
+                                            ← 6 angles + a cutaway plan. Read ALL.
 6. Fix what the images show. Back to 4.
 7. node scripts/export-glb.mjs <dir>     ← only when 4 and 5 are clean.
 ```
@@ -61,8 +62,12 @@ It also means iteration is a JSON edit, not a code rewrite. When the user says
 **Do not skip step 5, and do not look at only one image.** The signature failure
 of generated 3D is a scene that is correct from the front and hollow, floating,
 or missing from every other side. `shot.mjs` takes spawn + four orbit angles +
-top-down for exactly this reason. The top-down is the highest-value one: it
-exposes overlapping furniture and rooms that don't tile.
+top-down for exactly this reason.
+
+**If the scene has an interior, add `--plan`.** A roofed building is opaque from
+all six default angles — they will show you four elevations and a roof while the
+stairs, the furniture and the room layout go unexamined. One cut per storey, just
+under its ceiling: `--plan 2.6 --plan 5.4`.
 
 ## Non-negotiables
 
