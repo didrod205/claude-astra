@@ -156,3 +156,32 @@ Create one with `["파일", "신규"]` (not "새로운 항목").
 
 **Undo path:** the `overwrite_existing: true` result, which returns the previous
 content verbatim for you to write back. Nothing else.
+
+**Closing a window you opened — the trap that ends the session.** The window
+close button is `AXButton/AXCloseButton`, and searching `role: "AXCloseButton"`
+finds nothing: the role is `AXButton` and the close-ness is a subrole, so search
+`role: "AXButton"` and read the subrole in the result. Pressing it returned `ok`
+and the window stayed — because an edited untitled document raises a
+*"이 새로운 문서를 유지하시겠습니까?"* sheet with `삭제 / 취소 / 저장`.
+
+Then it got worse, in a way worth knowing before you start:
+
+1. The sheet **detached into its own window** (`title: "저장"`, a second
+   `window_id`) rather than staying a sheet on the document.
+2. Both windows reported `is_off_space: true`, and an off-Space window's
+   accessibility walk returns **nothing** — `app_ax_find` searched 0 elements.
+   No index to click, and coordinate clicks are refused as unverifiable.
+3. `app_bring_to_current_space` refused: *"the user's current Space is a
+   full-screen app, and a window can't be moved into a full-screen Space."*
+4. After the user left full screen, `app_bring_to_current_space` reported
+   *"already on the current Space"* while `app_click` on the same window still
+   refused with *"this window is on another Space"* — the two tools disagreed.
+   The tool notes say an off-Space window and a **locked screen** are
+   indistinguishable from here, which is the only reading consistent with both.
+
+The lesson is not about TextEdit. **A modal you raise in the background can end
+up somewhere the background path cannot reach**, and then there is no recovery
+inside it — only display-scope control or the user. So: before you open a window
+or trigger a dialog in an app, know how you will close it, and prefer not
+creating unsaved state at all. Nothing was written to disk here, but the window
+could not be closed without the user.

@@ -57,7 +57,20 @@ applied and re-applying them may double the effect. The result tells you where:
 a refused `delete` reported `Batch stopped at actions[2] (key). Completed 2 of 4;
 1 not run.` Screenshot, confirm that reading, resume from there.
 
-## 5. When you are properly stuck
+## 5. Off-Space and locked screens
+
+An `is_off_space: true` window returns an **empty accessibility walk** — no
+indices, and coordinate clicks refused as unverifiable. `app_bring_to_current_space`
+is the documented fix, and it fails in two ways worth recognising:
+
+- *"the user's current Space is a full-screen app"* — a window cannot be moved
+  into a full-screen Space. Ask the user to leave full screen.
+- It reports *"already on the current Space"* while clicks still refuse with
+  *"this window is on another Space"*. The tools disagree because a **locked
+  screen looks exactly like an off-Space window** from the background. Nothing
+  will work until the screen is unlocked; stop and say so.
+
+## 6. When you are properly stuck
 
 Stop and tell the user, with:
 
