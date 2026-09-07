@@ -59,7 +59,7 @@ whether bullets end in a full stop, how long a heading runs.
 
 ## Verified
 
-`./verify.sh` reproduces every claim below. 24 checks, no arguments, no setup —
+`./verify.sh` reproduces every claim below. 26 checks, no arguments, no setup —
 it builds its own fixtures in a temp directory and cleans up after itself.
 
 ```
@@ -69,6 +69,8 @@ walkable-3d
   ok    shot.mjs renders a frame headlessly
   ok    audit fails a scene that does not hold the player up
   ok    a terrain scene audits clean and holds the player up
+  ok    the player can walk across terrain in every direction
+  ok    the player can walk in through the front door
   ok    --plan cuts through the roof for an interior view
   ok    glTF export keeps object names and parenting
 playable-prototype
@@ -193,6 +195,7 @@ iterating means editing numbers, not rewriting code.
 
 ```bash
 node walkable-3d/scripts/audit.mjs      scene/
+node walkable-3d/scripts/walk.mjs       scene/                # can you MOVE through it?
 node walkable-3d/scripts/shot.mjs       scene/ --out shots --plan 2.6 --plan 5.4
 node walkable-3d/scripts/serve.mjs      scene/ --open        # walk it yourself
 node walkable-3d/scripts/export-glb.mjs scene/ --out house.glb
@@ -208,6 +211,21 @@ audit - townhouse
 You get `scene/` (three files), six angles plus a cutaway plan per storey in
 `shots/`, and a `.glb` whose objects keep the names you gave them — `w_g_s_l`,
 `step_07`, `balc_rail_n` — so a person can open it in Blender and move the bed.
+
+**Standing is not walking.** `walk.mjs` holds W in eight directions and reports
+how far the player got, how much they climbed, and whether they ever ended up
+below the ground:
+
+```
+    0°    9.23 m   climb  0.14 m   end y   1.84   on ground
+   90°   15.60 m   climb  0.85 m   end y   0.91   on ground
+```
+
+At the walk speed of 2.6 m/s, six seconds is 15.6 m — anything much shorter means
+something stopped them. It is the only check that catches a building you cannot
+enter, which the bundled cabin was for several revisions: its own door leaf, ajar
+at 26°, left 12 cm of a 1 m opening. Plenty to look at, impossible to walk
+through.
 
 **Add `--plan` for anything with an interior.** A roofed building is opaque from
 all six default angles — this is what the six show you instead:
@@ -395,7 +413,7 @@ exposed — typing into its search field filtered a table the tree never describ
 ## Try it without asking Claude
 
 ```bash
-./verify.sh                                                   # all 24 checks, ~5 min
+./verify.sh                                                   # all 26 checks, ~5 min
 node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
 open playable-prototype/assets/template/game.html
 ```

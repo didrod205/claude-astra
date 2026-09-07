@@ -6,6 +6,7 @@ unwalkable.
 
 ```bash
 node scripts/audit.mjs  scene/            # structure    → exit 2 = broken
+node scripts/walk.mjs   scene/            # movement     → exit 2 = not walkable
 node scripts/shot.mjs   scene/ --out shots  # appearance  → read every image
 ```
 
@@ -42,6 +43,36 @@ Exit code 0 clean · 1 warnings · 2 errors. `--json` for the raw report.
 
 `clash` compares axis-aligned world bounds, so a rotated object clashes as its
 bounding box. Parent/child pairs are exempt.
+
+## walk.mjs
+
+```bash
+node scripts/walk.mjs scene/ [--seconds 8] [--dirs 8] [--json]
+```
+
+Holds W from the spawn in `--dirs` evenly spaced directions and reports what a
+person would find out doing the same thing.
+
+```
+    0°    9.23 m   climb  0.14 m   end y   1.84   on ground
+   90°   15.60 m   climb  0.85 m   end y   0.91   on ground
+```
+
+`distance` is the giveaway. At the walk speed of 2.6 m/s, six seconds is 15.6 m —
+anything much shorter means something stopped the player, and the direction tells
+you what.
+
+| check | fails when |
+|---|---|
+| `walk` — could not move | no direction cleared 1 m. The spawn is boxed in |
+| `walk` — only n of m directions | most headings are blocked. Usually intended indoors, suspicious outdoors |
+| `walk` — ended BELOW the ground | they fall through the floor |
+| `walk` — a single frame dropped >1.5 m | a hole, or a ledge with nothing under it |
+| `walk` — airborne more than half the time | the ground is not carrying them |
+
+**This is the only check that catches a building you cannot enter.** The bundled
+cabin audited clean for several revisions while its own door leaf, ajar at 26°,
+left 12 cm of a 1 m opening — plenty to look at, impossible to walk through.
 
 ## shot.mjs
 

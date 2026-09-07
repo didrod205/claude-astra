@@ -529,7 +529,11 @@ function makeController(camera, solids, colliders, spawn) {
     if (state.onGround && k.has('Space')) { state.vy = 7.0; state.onGround = false; }
     pos.y += state.vy * dt;
 
-    const ground = floorAt(pos.x, pos.z, pos.y + 2);
+    // Cast from just above the FEET, not from above the head. Starting the ray
+    // over the player's head makes anything overhead a floor — a tree canopy, a
+    // roof overhang, a table top — and they get lifted onto it in one frame.
+    // From feet + STEP_UP you can climb a stair and nothing else.
+    const ground = floorAt(pos.x, pos.z, pos.y - EYE + STEP_UP + 0.02);
     if (ground != null) {
       const target = ground + EYE;
       if (pos.y <= target + 0.01 || (state.onGround && target - pos.y < STEP_UP)) {
@@ -668,13 +672,58 @@ async function boot() {
    *  A bounding-box guess cannot answer this for a heightfield: a terrain's box
    *  reaches far above the player, so "is there a surface under the spawn?"
    *  comes back no while they are standing on a hill. */
-  window.__groundAt = (x, z, from) => ctrl.floorAt(x, z, from ?? 200);
+  window.__groundAt = (x, z, eyeY) =>
+    ctrl.floorAt(x, z, (eyeY ?? 200) - EYE + STEP_UP + 0.02);
 
-  window.__simulate = (sec = 1, dt = 1 / 60) => {
+  window.__simulate = (sec = 1, dt = 1 / 60, keys = []) => {
+    for (const k of keys) ctrl.state.keys.add(k);
     const n = Math.max(1, Math.round(sec / dt));
     for (let i = 0; i < n; i++) ctrl.step(dt);
+    for (const k of keys) ctrl.state.keys.delete(k);
     return { y: ctrl.pos.y, vy: ctrl.state.vy, onGround: ctrl.state.onGround,
              x: ctrl.pos.x, z: ctrl.pos.z, steps: n };
+  };
+
+  /** Put the player somewhere and point them, so a checker can walk the same
+   *  route from the same place every time. */
+  window.__place = (pos, yaw = 0) => {
+    ctrl.pos.set(...pos);
+    ctrl.state.yaw = yaw; ctrl.state.pitch = 0; ctrl.state.vy = 0;
+    ctrl.state.keys.clear();
+    ctrl.step(0);
+    return { x: ctrl.pos.x, y: ctrl.pos.y, z: ctrl.pos.z, onGround: ctrl.state.onGround };
+  };
+
+  /** Walk forward for `sec`, sampling the path. Reports what a person would
+   *  find out by holding W: how far they got, whether the ground carried them,
+   *  and whether they ever dropped through it. */
+  window.__walk = (yaw, sec = 8, dt = 1 / 60, spawn = null) => {
+    const start = spawn ?? (manifest.spawn?.position ?? [0, 1.7, 0]);
+    window.__place(start, yaw);
+    const n = Math.max(1, Math.round(sec / dt));
+    let minY = Infinity, maxY = -Infinity, worstDrop = 0, airborne = 0, prevY = ctrl.pos.y;
+    const x0 = ctrl.pos.x, z0 = ctrl.pos.z;
+    ctrl.state.keys.add('KeyW');
+    for (let i = 0; i < n; i++) {
+      ctrl.step(dt);
+      const y = ctrl.pos.y;
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      worstDrop = Math.max(worstDrop, prevY - y);
+      if (!ctrl.state.onGround) airborne++;
+      prevY = y;
+    }
+    ctrl.state.keys.delete('KeyW');
+    const ground = window.__groundAt(ctrl.pos.x, ctrl.pos.z, ctrl.pos.y);
+    return {
+      distance: +Math.hypot(ctrl.pos.x - x0, ctrl.pos.z - z0).toFixed(2),
+      climb: +(maxY - minY).toFixed(2),
+      endY: +ctrl.pos.y.toFixed(2),
+      groundBelow: ground == null ? null : +ground.toFixed(2),
+      underGround: ground != null && ctrl.pos.y < ground - 0.1,
+      worstDrop: +worstDrop.toFixed(2),
+      airborneFraction: +(airborne / n).toFixed(2),
+      onGround: ctrl.state.onGround,
+    };
   };
 
   /** Hide everything sitting entirely above `y`, so a top-down shot cuts through

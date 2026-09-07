@@ -79,6 +79,20 @@ JSON
 expect 0 "a terrain scene audits clean and holds the player up" -- \
   node walkable-3d/scripts/audit.mjs "$TMP/terrain"
 
+expect 0 "the player can walk across terrain in every direction" -- \
+  node walkable-3d/scripts/walk.mjs "$TMP/terrain" --seconds 8
+
+# Standing is not walking. This one exists because the bundled scene once looked
+# right, audited clean, and could not be entered through its own front door.
+node walkable-3d/scripts/walk.mjs walkable-3d/assets/template --seconds 6 --dirs 4 --json >"$TMP/walk.json" 2>/dev/null
+node -e '
+  const r = require("'"$TMP"'/walk.json").runs.find(x => x.heading === 0);
+  if (!r) throw new Error("no forward run");
+  if (r.endY < 1.78) throw new Error(`did not get inside: ended at eye y ${r.endY}`);
+  if (r.distance < 6) throw new Error(`blocked after ${r.distance} m`);
+' 2>"$TMP/out" && ok "the player can walk in through the front door" \
+  || { bad "front-door walk failed"; sed 's/^/        /' "$TMP/out" | tail -3; }
+
 node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn --plan 1.5 --scale 1 --w 640 --h 400 >/dev/null 2>&1
 [ -s "$TMP/shots/plan-1_5.png" ] && ok "--plan cuts through the roof for an interior view" || bad "--plan produced no image"
 

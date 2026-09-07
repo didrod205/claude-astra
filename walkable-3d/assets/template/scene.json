@@ -7,12 +7,12 @@
   "fov": 66,
   "spawn": {
     "position": [
-      0,
+      -1.1,
       1.72,
       7.6
     ],
     "lookAt": [
-      0,
+      -1.1,
       1.45,
       0
     ]
@@ -167,7 +167,7 @@
       "flatten": [
         {
           "at": [
-            0,
+            -1.1,
             1.5
           ],
           "radius": 13,
@@ -187,7 +187,7 @@
         6.2
       ],
       "position": [
-        0,
+        -1.1,
         0.025,
         5.4
       ],
@@ -203,11 +203,12 @@
         0.7
       ],
       "position": [
-        0,
+        -1.1,
         0.07,
         2.55
       ],
-      "material": "stone"
+      "material": "stone",
+      "solid": false
     },
     {
       "id": "cabin",
@@ -958,7 +959,7 @@
           ],
           "rotation": [
             0,
-            -26,
+            -95,
             0
           ],
           "children": [
@@ -1020,7 +1021,7 @@
             2.225
           ],
           "material": "plinth",
-          "solid": true
+          "solid": false
         },
         {
           "id": "plinth_1",
@@ -1036,7 +1037,7 @@
             -2.225
           ],
           "material": "plinth",
-          "solid": true
+          "solid": false
         },
         {
           "id": "plinth_2",
@@ -1052,7 +1053,7 @@
             0
           ],
           "material": "plinth",
-          "solid": true
+          "solid": false
         },
         {
           "id": "plinth_3",
@@ -1068,7 +1069,7 @@
             0
           ],
           "material": "plinth",
-          "solid": true
+          "solid": false
         }
       ]
     },

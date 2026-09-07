@@ -53,6 +53,7 @@ It also means iteration is a JSON edit, not a code rewrite. When the user says
 2. Lay out on paper first — a metre grid, room by room. references/scale.md
 3. Write scene.json.
 4. node scripts/audit.mjs <dir>          ← structural truth. Fix every error.
+4b. node scripts/walk.mjs <dir>          ← can you actually MOVE through it?
 5. node scripts/shot.mjs <dir> --out shots --plan <y per storey>
                                             ← 6 angles + a cutaway plan. Read ALL.
 6. Fix what the images show. Back to 4.
@@ -81,6 +82,13 @@ traces back to abandoning this. Full table in `references/scale.md`.
 ground, rugs, stairs must be **`solid: false`** — the walk controller finds
 floors by raycasting down, and a solid floor becomes a wall you cannot enter.
 This is the single most common mistake in a first draft.
+
+**Standing is not walking.** `audit.mjs` proves the ground holds the player up
+where they spawn. `walk.mjs` holds W in eight directions and reports how far they
+got, how much they climbed, and whether they ever ended up below the ground. It
+is the only check that catches a scene which looks right, audits clean, and
+cannot be entered through its own front door — which is exactly what the bundled
+cabin did until the door leaf was opened past the width of a person.
 
 **The spawn point is part of the design.** Put it where the scene reads best on
 arrival, outside a solid, with floor under it. `audit.mjs` fails the build if the
@@ -117,7 +125,7 @@ use, in `references/export.md`.
 - `references/scale.md` — real-world dimensions, layout method, lighting presets
 - `references/verification.md` — every audit check, how to read the shots
 - `references/export.md` — glTF out, Blender/Unreal import, Blender `bpy` path
-- `scripts/audit.mjs`, `shot.mjs`, `serve.mjs`, `export-glb.mjs`, `lib.mjs`
+- `scripts/audit.mjs`, `walk.mjs`, `shot.mjs`, `serve.mjs`, `export-glb.mjs`, `lib.mjs`
 
 Scripts are zero-dependency Node (22+) driving headless Chrome over CDP. They
 find Chrome themselves; set `CHROME_BIN` to override, `W3D_GL=angle` to use the
