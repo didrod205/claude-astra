@@ -75,8 +75,22 @@ try {
   }
 
   // 5. Floating / sunken objects.
-  const below = meshes.filter(o => o.max[1] < -0.05 && o.id !== 'ground');
-  if (below.length) add('warn', 'layout', `${below.length} object(s) sit entirely below y=0: ${below.slice(0, 5).map(o => o.id).join(', ')}`);
+  // Buried geometry, measured against the ground under each object rather than
+  // against y=0 — on terrain, y=0 is just wherever `flatten.height` put it, and
+  // correctly-seated rock in a hollow flags as sunk.
+  const hasTerrain = d.objects.some(o => o.type === 'terrain');
+  const candidates = meshes.filter(o => o.max[1] < (hasTerrain ? 40 : -0.05) && o.id !== 'ground');
+  let below = [];
+  if (!hasTerrain) {
+    below = candidates;
+  } else if (candidates.length) {
+    const pts = candidates.map(o => [(o.min[0] + o.max[0]) / 2, (o.min[2] + o.max[2]) / 2]);
+    const gs = await cdp.eval(`JSON.stringify(window.__groundAtMany(${JSON.stringify(pts)}))`)
+      .then(JSON.parse).catch(() => null);
+    if (gs) below = candidates.filter((o, i) => gs[i] != null && o.max[1] < gs[i] - 0.05);
+  }
+  if (below.length) add('warn', 'layout',
+    `${below.length} object(s) are buried under the ground: ${below.slice(0, 5).map(o => o.id).join(', ')}`);
 
   // 6. Solid objects intersecting each other.
   const solids = meshes.filter(o => o.solid);
@@ -143,10 +157,22 @@ try {
 
   // Only near the floor: a solid sill at waist height is furniture you bump into,
   // which is fine. A solid 26 cm course at ankle height is a fence.
-  const floorY = Math.min(...meshes.map(o => o.min[1]));
-  const lowSolids = solids.filter(o => o.size[1] > 0.02 && o.size[1] < 0.35 &&
-                                       Math.max(o.size[0], o.size[2]) > 1.0 &&
-                                       o.min[1] < floorY + 0.6);
+  const floorY = (stand && isFinite(stand.y)) ? stand.y - 1.7
+               : Math.min(...meshes.map(o => o.min[1]));
+  // What makes a low slab a fence is that it sits ON the ground. A bench seat
+  // and a bunk rail are the same height and the same size, but they stand on
+  // legs — you walk around those, and nobody expects to step over them. A kerb,
+  // a plinth or a threshold course rests on the floor and stops you for no
+  // reason a person would accept.
+  // And a fence is a LINE, not a block. A bed base and a step rest on the floor
+  // at the same height as a kerb and are meant to be solid; what makes a kerb a
+  // kerb is that it runs — a footprint many times longer than it is deep.
+  const lowSolids = solids.filter(o => {
+    const [sx, , sz] = o.size;
+    const long = Math.max(sx, sz), thin = Math.max(Math.min(sx, sz), 1e-4);
+    return o.size[1] > 0.02 && o.size[1] < 0.35 && long > 1.0 &&
+           o.min[1] < floorY + 0.15 && long / thin > 6;
+  });
   if (lowSolids.length)
     add('warn', 'solid', `${lowSolids.length} low solid slab(s) — ${lowSolids.slice(0, 4).map(o => o.id).join(', ')}. ` +
       'Under 35 cm is trim you step onto; solid, it is a wall you cannot step over');

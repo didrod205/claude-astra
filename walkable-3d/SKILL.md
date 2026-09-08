@@ -77,7 +77,13 @@ few objects and is the difference between a greybox and something worth walking
 around. The audit now catches the last three, but it is faster to not make them.
 
 **Ground.** `kind: "terrain"` with a `flatten` disc where you build, not a flat
-slab. `falloff` at least the amplitude, or you cut a cookie-cutter mesa.
+slab. `falloff` at least the amplitude, or you cut a cookie-cutter mesa. To place
+anything *outside* the flattened disc, ask `scripts/ground.mjs` for the height —
+the terrain is generated in the page and you cannot work it out from the manifest.
+
+**Keep distant scenery out.** A ring of mountain-peak props at 80 m stretches the
+subject bounds to 300 m, and every auto-framed shot then photographs empty
+landscape. Let the terrain make the distance.
 
 **Every interior needs a `{ kind: "light" }`.** An emissive material is a bright
 surface that emits nothing; a room without a light object renders as a black box.
@@ -165,7 +171,8 @@ use, in `references/export.md`.
 - `references/scale.md` — real-world dimensions, layout method, lighting presets
 - `references/verification.md` — every audit check, how to read the shots
 - `references/export.md` — glTF out, Blender/Unreal import, Blender `bpy` path
-- `scripts/audit.mjs`, `walk.mjs`, `shot.mjs`, `serve.mjs`, `export-glb.mjs`, `lib.mjs`
+- `scripts/audit.mjs`, `walk.mjs`, `ground.mjs`, `shot.mjs`, `serve.mjs`,
+  `export-glb.mjs`, `lib.mjs`
 
 Scripts are zero-dependency Node (22+) driving headless Chrome over CDP. They
 find Chrome themselves; set `CHROME_BIN` to override, `W3D_GL=angle` to use the

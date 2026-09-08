@@ -74,9 +74,28 @@ you what.
 | `walk` — a single frame dropped >1.5 m | a hole, or a ledge with nothing under it |
 | `walk` — airborne more than half the time | the ground is not carrying them |
 
+A run that falls well short of the expected distance names what stopped it:
+`stopped by stove_body`. A 5 cm marker post and a wall look identical in the
+distance column, and only one of them is a problem.
+
 **This is the only check that catches a building you cannot enter.** The bundled
 cabin audited clean for several revisions while its own door leaf, ajar at 26°,
 left 12 cm of a 1 m opening — plenty to look at, impossible to walk through.
+
+## ground.mjs
+
+```bash
+node scripts/ground.mjs scene/ 12,-4 0,0 -8,15
+node scripts/ground.mjs scene/ --grid -20,-20,20,20,5
+```
+
+Prints the ground height at each point, tab-separated. Terrain is generated from
+seeded noise **inside the page**, so this is the only honest way to seat a prop
+on a hillside without reimplementing that noise wherever you author the
+manifest. Where a scene has terrain the query hits the terrain specifically —
+you want the hillside under the hut, not the hut's roof.
+
+Use it before placing anything outside a `flatten` disc.
 
 ## shot.mjs
 
@@ -102,7 +121,7 @@ no GPU assumptions — and it is slow: with ambient occlusion and bloom on a
 120-object scene, one 1280×800 frame at `--scale 2` takes about a minute, and the
 default six take three. Two levers:
 
-- `--scale 1` and a smaller `--w/--h` when you only need to know that something
+- `--scale` **defaults to 2**. Pass `--scale 1` with a smaller `--w/--h` when you only need to know that something
   rendered rather than to look at it closely. 640×400 at scale 1 is ~12 s.
 - `W3D_GL=angle` uses the real GPU and is far faster. Use it for the shots you
   are actually going to look at.

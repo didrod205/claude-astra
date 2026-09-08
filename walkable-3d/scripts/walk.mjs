@@ -90,7 +90,8 @@ else {
   for (const r of runs) {
     console.log(`  ${String(r.heading).padStart(3)}°  ${String(r.distance).padStart(6)} m   ` +
       `climb ${String(r.climb).padStart(5)} m   end y ${String(r.endY).padStart(6)}   ` +
-      `${r.onGround ? 'on ground' : 'AIRBORNE '}${r.underGround ? '  UNDER GROUND' : ''}`);
+      `${r.onGround ? 'on ground' : 'AIRBORNE '}${r.underGround ? '  UNDER GROUND' : ''}` +
+      `${r.blocker && r.distance < SEC * 2.6 * 0.6 ? `   stopped by ${r.blocker}` : ''}`);
   }
   console.log('');
   for (const p of problems) console.log(`  ${p.level === 'error' ? 'x' : p.level === 'warn' ? '!' : '·'} [${p.check}] ${p.msg}`);

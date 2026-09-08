@@ -248,6 +248,11 @@ all six default angles — this is what the six show you instead:
 </p>
 
 <p align="center">
+  <img src="media/refuge-interior.png" width="820" alt="Interior of a generated mountain refuge: lit stove with a flue, exposed rafters and collar ties over pine sarking, two-tier bunks with ladders and bedding, a hanging lantern">
+  <br><em>Built by a session that had only this skill and a one-line brief — no other context. The audit was clean on the first run; <code>walk.mjs</code> found a bench blocking the doorway, and the shot tooling had to be fixed before its images were usable at all.</em>
+</p>
+
+<p align="center">
   <img src="media/chapel-interior.png" width="820" alt="Interior of a generated hillside chapel: candlelit altar, six tall windows with reveals and sills, pews with ends, a red runner up the aisle, sunlight patches on the flagstone">
   <br><em>A second scene, built from scratch to test whether the guidance works on a first pass. Warm candlelight against cool daylight, six windows with reveals, pews in four parts, a runner up the aisle.</em>
 </p>

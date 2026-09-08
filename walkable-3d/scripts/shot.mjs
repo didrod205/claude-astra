@@ -4,7 +4,8 @@
 //   node scripts/shot.mjs <sceneDir> [--out shots] [--w 1280] [--h 800]
 //                         [--pose x,y,z@lx,ly,lz]...   (repeatable; overrides auto poses)
 //                         [--plan <y>]...              (repeatable; cutaway plan at that height)
-//                         [--only spawn|orbit|top] [--scale 1|2]
+//                         [--only spawn|orbit|top] [--scale 1|2]   (default 2)
+//   --out defaults to <sceneDir>/shots. --pose and --plan can be combined.
 //
 // Default poses = spawn + 4 orbit corners + 1 top-down. One angle is never enough:
 // the classic generated-3D failure is a facade that looks right from the front and
@@ -24,7 +25,10 @@ const positional = argv.filter((a, i) => {
   return !a.startsWith('--') && !(prev?.startsWith('--') && FLAGS_WITH_VALUE.has(prev.slice(2)));
 });
 const dir = resolve(positional[0] ?? '.');
-const out = resolve(flag('out', 'shots'));
+// Default under the SCENE directory, not the working directory: `--out shots`
+// run from the skill's own folder used to write into the installed skill.
+const outFlag = flag('out', null);
+const out = outFlag ? resolve(outFlag) : resolve(dir, 'shots');
 const W = +flag('w', 1280), H = +flag('h', 800);
 // Device pixel ratio. 2 for images you will look at; 1 when you only need to
 // know that something rendered — software WebGL costs four times as much at 2.
@@ -90,9 +94,13 @@ try {
   // this is the only view that shows the interior you actually built.
   for (const y of planCuts) {
     const hidden = await cdp.eval(`window.__clipAbove(${y})`);
-    const h = Math.max(b.size[0], b.size[2]) * 1.05;
+    // Frame what SURVIVES the cut. Framing the whole subject put the camera
+    // hundreds of metres up over a scene with distant scenery, and returned a
+    // featureless white rectangle that looks exactly like a broken scene.
+    const pb = await cdp.eval(`JSON.stringify(window.__bounds({ subject: true, visibleOnly: true }))`).then(JSON.parse);
+    const pc = pb.center, h = Math.max(pb.size[0], pb.size[2]) * 1.05 + 2;
     await cdp.eval(`window.__setCamera(${JSON.stringify({
-      position: [cx, y + h, cz + 0.01], lookAt: b.center })})`);
+      position: [pc[0], pc[1] + h, pc[2] + 0.01], lookAt: pc })})`);
     await new Promise(r => setTimeout(r, 120));
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
     const file = resolve(out, `plan-${String(y).replace('.', '_')}.png`);

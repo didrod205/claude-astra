@@ -443,7 +443,13 @@ function buildScene(manifest, renderer) {
   }
 
   scene.updateMatrixWorld(true);
-  scene.traverse(n => { if (n.userData?.solid) solids.push(new THREE.Box3().setFromObject(n)); });
+  scene.traverse(n => {
+    if (n.userData?.solid) {
+      const box = new THREE.Box3().setFromObject(n);
+      box.userData = { id: n.name };
+      solids.push(box);
+    }
+  });
 
   // Fit the shadow camera to what was actually built, ignoring terrain-sized
   // slabs. A hand-set extent is nearly always far too generous, and every
@@ -484,6 +490,11 @@ function makeController(camera, solids, colliders, spawn) {
     state.pitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
   }
 
+  const blockerAt = (x, z) => solids.find(b =>
+    x + RADIUS > b.min.x && x - RADIUS < b.max.x &&
+    z + RADIUS > b.min.z && z - RADIUS < b.max.z &&
+    pos.y - EYE + 1.6 > b.min.y && pos.y - EYE + 0.1 < b.max.y);
+
   const overlaps = (x, z) => solids.some(b =>
     x + RADIUS > b.min.x && x - RADIUS < b.max.x &&
     z + RADIUS > b.min.z && z - RADIUS < b.max.z &&
@@ -491,9 +502,9 @@ function makeController(camera, solids, colliders, spawn) {
 
   const ray = new THREE.Raycaster();
   const DOWN = new THREE.Vector3(0, -1, 0);
-  const floorAt = (x, z, fromY) => {
+  const floorAt = (x, z, fromY, far = 60) => {
     ray.set(new THREE.Vector3(x, fromY, z), DOWN);
-    ray.far = 60;
+    ray.far = far;
     const hit = ray.intersectObjects(colliders, false)[0];
     return hit ? hit.point.y : null;
   };
@@ -546,7 +557,7 @@ function makeController(camera, solids, colliders, spawn) {
     camera.rotation.set(state.pitch, state.yaw, 0, 'YXZ');
   }
 
-  return { step, state, pos, floorAt, overlaps };
+  return { step, state, pos, floorAt, overlaps, blockerAt };
 }
 
 /* ------------------------------------------------------------------ boot */
@@ -668,6 +679,26 @@ async function boot() {
    *  requestAnimationFrame — which a headless or hidden page throttles or pauses
    *  outright. This is how a checker asks "does the ground hold the player up?"
    *  and gets the same answer every time. */
+  /** Ground heights for a list of [x, z] points, for seating props on terrain
+   *  without reimplementing the noise. scripts/ground.mjs is the CLI for this. */
+  window.__groundAtMany = pts => {
+    // Start above everything and reach all the way down: the controller's
+    // 60 m ray is sized for a walking player, not for a survey from above.
+    const b = new THREE.Box3().setFromObject(scene);
+    const top = b.max.y + 10, far = (b.max.y - b.min.y) + 40;
+    // Prefer the terrain when there is one: an author seating a rock wants the
+    // hillside, not the roof of the hut that happens to stand on that spot.
+    const terrain = [];
+    scene.traverse(n => { if (n.isMesh && n.userData?.kind === 'terrain') terrain.push(n); });
+    return pts.map(([x, z]) => {
+      const g = terrain.length
+        ? (() => { const r = new THREE.Raycaster(new THREE.Vector3(x, top, z), new THREE.Vector3(0, -1, 0));
+                   r.far = far; const h = r.intersectObjects(terrain, false)[0]; return h ? h.point.y : null; })()
+        : ctrl.floorAt(x, z, top, far);
+      return g == null ? null : +g.toFixed(3);
+    });
+  };
+
   /** The exact ground height the walk controller would find, for any geometry.
    *  A bounding-box guess cannot answer this for a heightfield: a terrain's box
    *  reaches far above the player, so "is there a surface under the spawn?"
@@ -713,6 +744,14 @@ async function boot() {
       prevY = y;
     }
     ctrl.state.keys.delete('KeyW');
+    // What is directly ahead? "Stopped after 2 m" is a puzzle; "stopped by
+    // marker_post_3" is a one-line read.
+    const fx = -Math.sin(ctrl.state.yaw), fz = -Math.cos(ctrl.state.yaw);
+    let blocker = null;
+    for (const d of [0.05, 0.2, 0.4]) {
+      const b = ctrl.blockerAt(ctrl.pos.x + fx * d, ctrl.pos.z + fz * d);
+      if (b) { blocker = b.userData?.id ?? '(unnamed)'; break; }
+    }
     const ground = window.__groundAt(ctrl.pos.x, ctrl.pos.z, ctrl.pos.y);
     return {
       distance: +Math.hypot(ctrl.pos.x - x0, ctrl.pos.z - z0).toFixed(2),
@@ -723,6 +762,7 @@ async function boot() {
       worstDrop: +worstDrop.toFixed(2),
       airborneFraction: +(airborne / n).toFixed(2),
       onGround: ctrl.state.onGround,
+      blocker,
     };
   };
 
@@ -758,7 +798,7 @@ async function boot() {
   /** bounds() is the whole scene; bounds({subject:true}) drops terrain-sized
    *  slabs (a ground plane covering most of the footprint), so auto-framing
    *  looks at the buildings and not at 3600 m2 of grass. */
-  window.__bounds = ({ subject = false } = {}) => {
+  window.__bounds = ({ subject = false, visibleOnly = false } = {}) => {
     const full = new THREE.Box3().setFromObject(scene);
     if (!subject) return boxOf(full);
     const fullArea = Math.max((full.max.x - full.min.x) * (full.max.z - full.min.z), 1e-6);
@@ -766,6 +806,7 @@ async function boot() {
     let kept = 0;
     scene.traverse(n => {
       if (!n.isMesh || !n.userData?.__manifest) return;
+      if (visibleOnly && !n.visible) return;
       const b = new THREE.Box3().setFromObject(n);
       if (((b.max.x - b.min.x) * (b.max.z - b.min.z)) / fullArea > 0.45) return;  // terrain
       acc.union(b); kept++;
@@ -806,10 +847,17 @@ async function boot() {
         // Whether the world matrix keeps the object axis-aligned. A rotated
         // slab's axis-aligned bounds are far larger than the slab, so an
         // overlap test on them is meaningless.
+        // A quarter turn is still axis-aligned: its bounds are exactly as tight
+        // as an unrotated one's. Testing for the identity instead of a signed
+        // permutation exempted every 90-degree group, and all its children, from
+        // the overlap check.
         axisAligned: (() => {
           const e = n.matrixWorld.elements;
-          const ok = v => Math.abs(v) < 1e-3 || Math.abs(Math.abs(v) - Math.hypot(e[0], e[1], e[2])) < 1e-3;
-          return [e[1], e[2], e[4], e[6], e[8], e[9]].every(v => Math.abs(v) < 1e-3);
+          for (const c of [[e[0], e[1], e[2]], [e[4], e[5], e[6]], [e[8], e[9], e[10]]]) {
+            const len = Math.hypot(...c) || 1;
+            if (c.filter(v => Math.abs(v) / len > 1e-3).length !== 1) return false;
+          }
+          return true;
         })(),
         min: box.min.toArray().map(v => +v.toFixed(3)),
         max: box.max.toArray().map(v => +v.toFixed(3)),
