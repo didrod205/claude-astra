@@ -803,6 +803,14 @@ async function boot() {
         parent: n.parent === scene ? null : (n.parent?.name || null),
         solid: !!n.userData.solid,
         visible: n.visible,
+        // Whether the world matrix keeps the object axis-aligned. A rotated
+        // slab's axis-aligned bounds are far larger than the slab, so an
+        // overlap test on them is meaningless.
+        axisAligned: (() => {
+          const e = n.matrixWorld.elements;
+          const ok = v => Math.abs(v) < 1e-3 || Math.abs(Math.abs(v) - Math.hypot(e[0], e[1], e[2])) < 1e-3;
+          return [e[1], e[2], e[4], e[6], e[8], e[9]].every(v => Math.abs(v) < 1e-3);
+        })(),
         min: box.min.toArray().map(v => +v.toFixed(3)),
         max: box.max.toArray().map(v => +v.toFixed(3)),
         size: size.toArray().map(v => +v.toFixed(3)),

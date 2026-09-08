@@ -41,8 +41,12 @@ Exit code 0 clean · 1 warnings · 2 errors. `--json` for the raw report.
 | `spawn` | spawn eye height is n m | not 1.7 — the whole scene will feel mis-scaled from the one viewpoint that matters most |
 | `perf` | n draw calls / n M triangles | over ~900 calls, merge repeated props or cut the count |
 
-`clash` compares axis-aligned world bounds, so a rotated object clashes as its
-bounding box. Parent/child pairs are exempt.
+`clash` compares axis-aligned world bounds, so a **rotated object is not
+compared at all** — a pitched roof slab's axis-aligned box is far bigger than the
+slab, and testing it produced a 50% "overlap" with the gable wall underneath on
+the first chapel that was built with one. The audit reports how many pairs it
+skipped for this reason; check pitched roofs, ramps and angled walls by eye.
+Parent/child pairs are exempt too.
 
 ## walk.mjs
 

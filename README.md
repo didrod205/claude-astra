@@ -248,6 +248,15 @@ all six default angles — this is what the six show you instead:
 </p>
 
 <p align="center">
+  <img src="media/chapel-interior.png" width="820" alt="Interior of a generated hillside chapel: candlelit altar, six tall windows with reveals and sills, pews with ends, a red runner up the aisle, sunlight patches on the flagstone">
+  <br><em>A second scene, built from scratch to test whether the guidance works on a first pass. Warm candlelight against cool daylight, six windows with reveals, pews in four parts, a runner up the aisle.</em>
+</p>
+
+<p align="center">
+  <img src="media/chapel-exterior.png" width="820" alt="The same chapel from outside: tower with a pyramidal spire, gabled slate roof, quoins, gate posts and rails along a gravel path, on rolling terrain">
+</p>
+
+<p align="center">
   <img src="media/terrain.png" width="820" alt="Hill country generated from seeded noise, rock colouring on the steep faces and green in the folds, with one flattened disc carrying a marker post">
   <br><em><code>kind: "terrain"</code> — seeded value noise, vertex colours blended by slope, and discs you flatten so a building has ground to stand on. It is a mesh, so it is walkable without doing anything else.</em>
 </p>

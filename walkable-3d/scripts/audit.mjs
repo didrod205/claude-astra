@@ -81,11 +81,14 @@ try {
   // 6. Solid objects intersecting each other.
   const solids = meshes.filter(o => o.solid);
   const vol = o => Math.max(o.size[0], 1e-6) * Math.max(o.size[1], 1e-6) * Math.max(o.size[2], 1e-6);
-  let clashes = 0;
+  let clashes = 0, skewed = 0;
   for (let i = 0; i < solids.length; i++) {
     for (let j = i + 1; j < solids.length; j++) {
       const a = solids[i], b = solids[j];
       if (a.parent === b.id || b.parent === a.id) continue;
+      // A rotated slab — a pitched roof, a ramp, an angled wall — has bounds far
+      // larger than itself, so comparing them says nothing. Skip and say so.
+      if (a.axisAligned === false || b.axisAligned === false) { skewed++; continue; }
       const ov = [0, 1, 2].map(k => Math.min(a.max[k], b.max[k]) - Math.max(a.min[k], b.min[k]));
       if (ov.some(v => v <= 0)) continue;
       const share = (ov[0] * ov[1] * ov[2]) / Math.min(vol(a), vol(b));
@@ -96,6 +99,8 @@ try {
     }
   }
   if (clashes > 6) add('warn', 'clash', `...and ${clashes - 6} more solid/solid overlaps`);
+  if (skewed) add('info', 'clash', `${skewed} pair(s) not compared — one side is rotated off-axis, ` +
+    'and its axis-aligned bounds are much larger than the object. Check pitched roofs and ramps by eye');
 
   // 7. The spawn point - the difference between "a walkable scene" and "a scene".
   if (!d.spawn) add('warn', 'spawn', 'no spawn defined; the player starts at a guess');
@@ -197,7 +202,9 @@ function report(d) {
       `${d.bounds.size.map(v => v.toFixed(1)).join(' x ')} m - ` +
       `${d.render.calls} draw calls - ${(d.render.triangles / 1000).toFixed(0)}k tris`);
     console.log('');
-    for (const p of [...errs, ...warns]) console.log(`  ${p.level === 'error' ? 'x' : '!'} [${p.check}] ${p.msg}`);
+    const infos = problems.filter(p => p.level === 'info');
+    for (const p of [...errs, ...warns, ...infos])
+      console.log(`  ${p.level === 'error' ? 'x' : p.level === 'warn' ? '!' : '.'} [${p.check}] ${p.msg}`);
     console.log(problems.length ? '' : '  ok - no structural problems\n');
   }
   process.exitCode = errs.length ? 2 : warns.length ? 1 : 0;
