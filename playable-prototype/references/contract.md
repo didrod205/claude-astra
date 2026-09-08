@@ -63,15 +63,53 @@ let acc = 0, last = performance.now();
 
 ## `state()` — what to expose
 
-Enough that a bot can tell whether it is doing well, and small enough to compare
-cheaply (the harness diffs the whole object).
+**Everything the player can read off the screen**, as objects with their
+coordinates. Positions, timers, what each thing is, how far through it you are.
 
-Always: `status`, `tick`, `score`. Then the handful of numbers that describe the
-situation — the player's position, lives, the count of live entities, the current
-level. **Not** the full entity list; a count is enough and keeps the diff fast.
+This page used to say the opposite — *"not the full entity list; a count is
+enough and keeps the diff fast"* — and that one sentence is the most common
+fault in the prototypes built with this skill, three of four:
+
+```js
+state: () => ({ status, tick, score, lives, x, needs, worst })
+//                                          ↑ a count, and the worst timer
+```
+
+The screen showed six doors, each with a countdown and a job in progress. The
+state showed **how many** and **the worst one**. Every check in the harness
+passes on that — contract, determinism, dead inputs, bot score, lookahead —
+because all of them drive the game with a *random* player, and a random player
+never needed to know which door.
+
+But it means no other player can exist. You cannot write "go to the nearest
+call", "go to the one about to expire", or "ignore the ones you cannot reach in
+time" against a count. So the moment you want to know whether your game has a
+decision in it — which is the moment this skill exists for — you cannot ask. Nor
+can an agent play it as a player rather than look at a screenshot of it.
+
+```js
+rooms: G.rooms.map((r, i) => ({
+  bay: i + 1, x: (i + 0.5) * RW, need: !!r.need,
+  left: r.left, kind: KINDS[r.kind].name, toGo: KINDS[r.kind].work - r.work,
+})),
+```
+
+Always: `status`, `tick`, `score`. Then lives, level, the player's position, and
+the entities. The diff cost is not the problem it was made out to be — twenty
+beds and three nurses are nothing beside a canvas redraw every tick.
 
 Round floats: `+x.toFixed(2)`. Unrounded floats make two mathematically identical
-runs compare unequal and the determinism check fail for the wrong reason.
+runs compare unequal and the determinism check fail for the wrong reason. This
+matters more once you expose entities, not less.
+
+## Turn-based: an empty board must not stop the clock
+
+If time advances only when the player acts, check what happens when there is
+nothing to act on. New work arriving on a *turn* counter means a player who
+clears the board freezes the game — no turns, so no arrivals, so no turns. One
+prototype here stopped dead at turn 34 of 200, and being good at it was what
+caused that. Either let time pass on an empty board, or make sure it cannot
+empty.
 
 ## By genre
 
@@ -141,6 +179,7 @@ the DOM sees stale values against working code. Keep `state()` authoritative.
 | unrounded floats in `state()` | `determinism`, confusingly |
 | an action declared but never read in `update()` | `input` — dead action |
 | `input()` writes a variable `update()` doesn't read | `input` — dead action |
+| a state that reports counts instead of objects | nothing — and that is exactly the problem. See *`state()` — what to expose* |
 | an action with nothing to act on in the first 2 seconds | `input` — dead action. The check holds each action for 120 ticks **from a fresh start**, so every declared action must have a valid target by then. A bell that first rings at tick 96, or a player who starts out of reach of anything, both read as a dead input |
 | scoring only on a condition a bot can't reach | `playable` — bot scored 0 |
 | `start()` doesn't set `status` to `'playing'` | `run` — tick never advanced |

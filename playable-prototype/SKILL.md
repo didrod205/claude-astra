@@ -135,9 +135,15 @@ act on each result, and for the two very different reasons a 1.0x can appear.
 
 It is also only the question **against a random player**. If you go on to develop
 one of these past its first clean run, that stops being enough: see *Past the
-first clean run* in `references/playtest.md`, and `examples/differential/` for a
-prototype that passed with a 10x lookahead score while its dominant strategy was
-to ignore every mechanic it had.
+first clean run* in `references/playtest.md`, and `examples/` for four
+prototypes taken there — one that passed with a 10x lookahead score while its
+dominant strategy was to ignore every mechanic it had, and three whose sensible
+policies all scored the same because the score was not looking at what separated
+them.
+
+For that to be possible at all, **`state()` has to expose the entities, not counts
+of them** — see `references/contract.md`. A count is enough for the random bot the
+harness runs, and enough for nothing else.
 
 The `--out` screenshots are for you to look at, not proof of anything. The
 harness cannot see that the player sprite is behind the background.

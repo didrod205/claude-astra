@@ -1,0 +1,294 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rounds — night shift B</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body { margin:0; min-height:100%; background:#0b0e13; display:grid; place-content:center;
+              font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#c3cddb; }
+  canvas { background:#11151d; border-radius:12px; display:block; touch-action:none; max-width:100%; height:auto; }
+  #bar { display:flex; justify-content:space-between; padding:8px 4px; letter-spacing:.03em; }
+  #bar b { font-weight:600; color:#e6edf6; }
+  #hint { text-align:center; color:#5f6b7c; padding-top:8px; max-width:520px; }
+</style>
+
+<div>
+  <div id="bar"><span id="clock">turn 0/200</span><span id="score">settled <b>0</b></span><span id="lives">incidents left <b>10</b></span></div>
+  <canvas id="c" width="500" height="420"></canvas>
+  <div id="hint">arrows / WASD step one tile · E treats the bed beside you · every action costs a turn, walls included — the ward only moves when you do · Space start</div>
+</div>
+
+<script>
+/* ======================================================================
+   B — ROUNDS.  Axis: pressure = deliberation, control = discrete steps.
+   Same fiction as A, but nothing happens until you act. A step costs a
+   turn; so does a wasted treat, so does walking into a wall. The clock is
+   your footsteps. This is a routing puzzle wearing scrubs.
+   ====================================================================== */
+
+const MAP = [
+  '#########',
+  '#BBBBBBB#',
+  '#.......#',
+  '#BBB.BBB#',   // the gap is the only way between the two corridors
+  '#.......#',
+  '#BBBBBBB#',
+  '#########',
+];
+const COLS = 9, ROWS = 7, T = 46, OX = 43, OY = 44;
+const W = 500, H = 420;
+const DAWN = 200, STEP = 10;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+
+const BEDS = [];
+for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (MAP[y][x] === 'B') BEDS.push({ x, y });
+const solid = (x, y) => x < 0 || y < 0 || x >= COLS || y >= ROWS || MAP[y][x] !== '.';
+
+let rngState = 1;
+const rnd = () => {
+  rngState |= 0; rngState = (rngState + 0x6D2B79F5) | 0;
+  let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+// Five names over identical mechanics is decoration, and it left the game with
+// exactly one verb. What each one costs you in turns is what makes standing at
+// a bed a commitment — and a commitment is what a routing puzzle needs, or the
+// route is just a shortest path with nothing at stake.
+// And in what it costs to leave one. With every need worth the same point and
+// the same life, nearest-need was optimal and three sensible policies scored
+// 33, 34, 34 — one server on a map makes distance the whole answer unless the
+// calls differ in what they are worth. Same lesson the corridor version taught,
+// arrived at twice.
+const KINDS = [
+  { name: 'obs due',       work: 1, hurts: false },
+  { name: 'analgesia',     work: 2, hurts: false },
+  { name: 'sats dropping', work: 3, hurts: true  },   // this one you cannot leave
+  { name: 'confused',      work: 2, hurts: false, becomes: 5 },
+  { name: 'drain',         work: 3, hurts: false },
+  // Not a call. What a confused patient left too long turns into: out of bed,
+  // and now a long job wherever they were.
+  { name: 'up and about',  work: 4, hurts: true  },
+];
+const CALLS = 5;
+let G;
+const fresh = () => ({
+  status: 'menu', turn: 0, score: 0, lives: 4, missed: 0, px: 4, py: 2, cool: 0,
+  beds: BEDS.map(b => ({ x: b.x, y: b.y, need: 0, t: 0, work: 0, kind: 0 })),
+  ok: 0, bad: 0, last: '',
+});
+G = fresh();
+let heldAction = null;
+const clearHeld = () => { heldAction = null; };
+
+function newNeed() {
+  const idle = [];
+  for (let i = 0; i < G.beds.length; i++) if (!G.beds[i].need) idle.push(i);
+  if (!idle.length) return;
+  const b = G.beds[idle[Math.floor(rnd() * idle.length)]];
+  b.need = 1; b.work = 0;
+  // Sized to the map. At 34-52 turns against a ward you can cross in eight
+  // steps, nothing was ever out of reach: every policy tried settled all 38
+  // calls, lost nobody and reached dawn on twelve nights out of twelve — the
+  // one that refused to cross the gap at all included. There was no puzzle.
+  b.t = 12 + Math.floor(rnd() * 10);
+  b.kind = Math.floor(rnd() * CALLS);
+}
+
+const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+
+function resolveTurn(a) {
+  if (DIRS[a]) {
+    const [dx, dy] = DIRS[a];
+    if (!solid(G.px + dx, G.py + dy)) { G.px += dx; G.py += dy; G.last = 'step'; }
+    else G.last = 'wall';
+  } else if (a === 'treat') {
+    let best = null;
+    for (const b of G.beds) {
+      if (!b.need) continue;
+      const d = Math.abs(b.x - G.px) + Math.abs(b.y - G.py);
+      if (d > 1) continue;
+      // stick with a job already begun rather than drifting to the next bed
+      if (!best) { best = b; continue; }
+      const bOn = b.work > 0, sOn = best.work > 0;
+      if (bOn !== sOn ? bOn : b.t < best.t) best = b;
+    }
+    if (best) {
+      best.work++;
+      if (best.work >= KINDS[best.kind].work) { best.need = 0; best.work = 0; best.t = 0; G.score++; G.ok = 2; G.last = 'settled'; }
+      else G.last = 'treating';
+    } else G.last = 'nobody there';
+  }
+
+  // time passes, once, for every action — including the wasted ones
+  G.turn++;
+  if (G.ok > 0) G.ok--;
+  if (G.bad > 0) G.bad--;
+  for (const b of G.beds) {
+    if (!b.need) continue;
+    b.t--;
+    if (b.t <= 0) {
+      const k = KINDS[b.kind];
+      b.work = 0; G.bad = 3; G.last = 'left too long';
+      if (k.becomes != null) { b.kind = k.becomes; b.t = 26; }          // and now it is worse
+      else if (k.hurts) { b.need = 0; b.t = 0; G.lives--; }
+      else { b.need = 0; b.t = 0; G.missed++; }
+    }
+  }
+  // Serving a bed costs about three turns of corridor and two of work, so the
+  // shift has room for roughly 38. Arrivals sit just under that, and the ward
+  // gets busier as the night goes on. Pitched above capacity instead, every
+  // policy ran out of lives before dawn and they all read alike; the point is
+  // to separate the routing that works from the routing that does not, and a
+  // shift nobody survives cannot.
+  const every = G.turn > 120 ? 5 : 6;
+  if (G.turn % every === 0) newNeed();
+  if (G.lives <= 0) { G.lives = 0; G.status = 'over'; }
+  else if (G.turn >= DAWN) G.status = 'over';
+}
+
+function update() {
+  if (G.status !== 'playing') return;
+  if (!heldAction) return;              // deliberation: no move, no time
+  if (G.cool > 0) { G.cool--; return; }
+  resolveTurn(heldAction);
+  G.cool = STEP;
+}
+
+/* ------------------------------------------------------------- drawing */
+const dom = {}, el = {};
+const setTxt = (id, v) => { if (dom[id] === v) return; dom[id] = v;
+  (el[id] || (el[id] = document.getElementById(id))).textContent = v; };
+
+function draw() {
+  ctx.fillStyle = '#11151d'; ctx.fillRect(0, 0, W, H);
+
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    const px = OX + x * T, py = OY + y * T;
+    if (MAP[y][x] === '#') { ctx.fillStyle = '#0d1119'; ctx.fillRect(px, py, T, T); continue; }
+    ctx.fillStyle = '#161c26';
+    ctx.fillRect(px + 1, py + 1, T - 2, T - 2);
+  }
+
+  for (const b of G.beds) {
+    const px = OX + b.x * T, py = OY + b.y * T;
+    ctx.fillStyle = b.need ? (b.t < 8 ? '#3a1f1f' : '#232c3a') : '#1b2230';
+    ctx.beginPath(); ctx.roundRect(px + 4, py + 6, T - 8, T - 12, 5); ctx.fill();
+    ctx.fillStyle = b.need ? (b.t < 8 ? '#e05a4a' : '#5fb4e0') : '#2b3446';
+    ctx.beginPath(); ctx.roundRect(px + 8, py + 9, T - 16, 11, 4); ctx.fill();
+    if (b.need && KINDS[b.kind].hurts) {
+      ctx.strokeStyle = '#e05a4a'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(px + 4.5, py + 6.5, T - 9, T - 13, 5); ctx.stroke();
+    }
+    if (b.need) {
+      ctx.fillStyle = b.t < 8 ? '#ffb4a8' : '#a8c6dd';
+      ctx.font = '600 13px ui-monospace,monospace'; ctx.textAlign = 'center';
+      ctx.fillText(b.t, px + T / 2, py + T - 12);
+      // How long this one will hold you, as pips — filled as you do it. The bed
+      // used to show only the countdown, so the other half of every routing
+      // decision was invisible: a three-turn job two steps away and a one-turn
+      // job six steps away looked identical.
+      const need = KINDS[b.kind].work, pw = 5, gap = 3;
+      let bx = px + T / 2 - (need * pw + (need - 1) * gap) / 2;
+      for (let k = 0; k < need; k++) {
+        ctx.fillStyle = k < b.work ? '#7ddba0' : 'rgba(255,255,255,.16)';
+        ctx.fillRect(bx + k * (pw + gap), py + T - 8, pw, 3);
+      }
+    }
+  }
+
+  // nurse
+  const nx = OX + G.px * T + T / 2, ny = OY + G.py * T + T / 2;
+  ctx.fillStyle = G.bad > 0 ? '#e05a4a' : G.ok > 0 ? '#7ddba0' : '#dfe6f0';
+  ctx.beginPath(); ctx.roundRect(nx - 9, ny - 6, 18, 20, 6); ctx.fill();
+  ctx.beginPath(); ctx.arc(nx, ny - 11, 7, 0, Math.PI * 2); ctx.fill();
+
+  // reach marker
+  ctx.strokeStyle = 'rgba(125,219,160,.35)'; ctx.lineWidth = 1;
+  for (const [dx, dy] of Object.values(DIRS)) {
+    const b = G.beds.find(b => b.need && b.x === G.px + dx && b.y === G.py + dy);
+    if (b) ctx.strokeRect(OX + b.x * T + 2, OY + b.y * T + 2, T - 4, T - 4);
+  }
+
+  ctx.textAlign = 'left'; ctx.font = '11px ui-monospace,monospace'; ctx.fillStyle = '#5f6b7c';
+  ctx.fillText(G.last || 'night round', OX, H - 14);
+
+  if (G.status !== 'playing') {
+    ctx.fillStyle = 'rgba(9,12,17,.85)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#e9eff7';
+    ctx.font = '600 28px ui-sans-serif,system-ui,sans-serif';
+    ctx.fillText(G.status === 'menu' ? 'ROUNDS' : (G.lives > 0 ? 'dawn' : 'shift abandoned'), W / 2, H / 2 - 14);
+    ctx.font = '13px ui-monospace,monospace'; ctx.fillStyle = '#93a1b3';
+    ctx.fillText(G.status === 'menu'
+      ? 'twenty beds, 200 turns, ten things you can let slide — press Space'
+      : `settled ${G.score} · ${10 - G.lives} left too long · turn ${G.turn}`, W / 2, H / 2 + 14);
+  }
+
+  setTxt('clock', 'turn ' + G.turn + '/' + DAWN);
+  setTxt('score', 'settled ' + G.score);
+  setTxt('lives', 'incidents left ' + G.lives);
+}
+
+/* ------------------------------------------------------------ contract */
+const api = {
+  actions: ['up', 'down', 'left', 'right', 'treat', 'start'],
+  state: () => {
+    let active = 0, worst = 0;
+    for (const b of G.beds) if (b.need) { active++; if (!worst || b.t < worst) worst = b.t; }
+    return { status: G.status, tick: G.turn, score: G.score, lives: G.lives,
+             px: G.px, py: G.py, active, worst, missed: G.missed,
+             // The screen shows twenty beds and the walls between them. The
+             // state showed a count and the worst timer, which is not enough to
+             // route with — and routing is the entire game. A machine API that
+             // carries less than the screen does is not one for this game.
+             map: MAP,
+             beds: G.beds.map((b, i) => ({ i, x: b.x, y: b.y, need: !!b.need,
+                                           t: b.t, kind: KINDS[b.kind].name,
+                                           workLeft: KINDS[b.kind].work - b.work,
+                                           hurts: KINDS[b.kind].hurts })) };
+  },
+  input(a, down = true) {
+    if (a === 'start') { if (down && G.status !== 'playing') api.start(); return; }
+    if (down) { heldAction = a; G.cool = 0; }
+    else if (heldAction === a) heldAction = null;
+  },
+  start() {
+    const keep = rngState; G = fresh(); rngState = keep; clearHeld();
+    G.status = 'playing';
+    newNeed(); newNeed(); newNeed(); newNeed();
+  },
+  reset() { G = fresh(); clearHeld(); },
+  seed(n) { rngState = n | 0; },
+  step(n = 1) { for (let i = 0; i < n; i++) update(); draw(); },
+};
+window.__game = api;
+
+/* --------------------------------------------------------- human input */
+const bind = m => { const t = {}; for (const k in m) { t[k] = m[k];
+  if (/^Key[A-Z]$/.test(k)) { t[k[3].toLowerCase()] = m[k]; t[k[3]] = m[k]; }
+  if (k === 'Space') t[' '] = m[k]; } return t; };
+const KEYS = bind({ ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
+                    ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
+                    KeyE: 'treat', Space: 'start' });
+addEventListener('keydown', e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) { e.preventDefault(); api.input(a, true); } });
+addEventListener('keyup',   e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) api.input(a, false); });
+cv.addEventListener('pointerdown', e => {
+  if (G.status !== 'playing') { api.input('start', true); return; }
+  const r = cv.getBoundingClientRect();
+  const gx = Math.floor(((e.clientX - r.left) * (W / r.width) - OX) / T);
+  const gy = Math.floor(((e.clientY - r.top) * (H / r.height) - OY) / T);
+  const dx = gx - G.px, dy = gy - G.py;
+  const a = (dx === 0 && dy === 0) ? 'treat'
+          : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+  api.input(a, true); setTimeout(() => api.input(a, false), 30);
+});
+
+api.seed(Date.now() & 0x7fffffff);
+let acc = 0, last = performance.now();
+(function loop(now) {
+  acc += Math.min(Math.max(now - last, 0), 100); last = now;
+  while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+  draw(); requestAnimationFrame(loop);
+})(last);
+</script>

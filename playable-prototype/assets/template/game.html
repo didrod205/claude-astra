@@ -138,6 +138,10 @@ const api = {
   state: () => ({
     status: G.status, tick: G.tick, score: G.score, lives: G.lives,
     lane: G.lane, x: +G.x.toFixed(2), items: G.items.length,
+    // Everything on screen, as objects. `items: G.items.length` above is the
+    // count a bot needs to see progress; this is what a PLAYER needs — you
+    // cannot write "dodge the nearest one" against a number.
+    falling: G.items.map(it => ({ lane: it.lane, y: +it.y.toFixed(2), kind: it.kind })),
   }),
 
   input(action, down = true) {

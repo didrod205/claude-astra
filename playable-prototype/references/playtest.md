@@ -148,6 +148,22 @@ about twenty minutes:
 | **economy** | what does each purchase actually buy? | free evidence already gave 78% — every test, the scanner and the clock were a rounding error |
 | **policy race** | do the decisions matter? | "never order anything" beat working patients up, 37 a night to 30 |
 
+Two results turned up so often across the prototypes built with this skill that
+they are worth checking for by name:
+
+**One server plus travel makes distance the whole answer.** In a game where one
+actor walks between jobs, nearest-first is close to optimal and every other rule
+collapses onto it — four policies scoring 19, 19, 19, 12 is what that looks like.
+No tuning fixes it, because it is a property of the shape. What fixes it is
+giving the jobs different worth: what each costs you, and what it costs to miss
+one. Two of these prototypes hit this independently, and they look nothing alike.
+
+**In a saturated system every reassignment is a loss.** If demand always exceeds
+capacity there is work wherever you already stand, so moving can only cost you the
+travel — and a static assignment given once at the start beats every policy that
+manages anything. If your game is about allocating attention, some of it has to be
+idle some of the time, or the allocation is not a decision.
+
 The policy race is the one to write first if you write only one. Several plainly
 different ways to play, each a single decision function, over the same seeds:
 
@@ -167,7 +183,13 @@ not move with the thing the game is about will read as balanced, deterministic,
 playable and deep, and still not be a game about that thing.
 
 Drive these through the public `__game` contract only, never the internals, or
-they will flatter what you built.
+they will flatter what you built. Which means `state()` has to carry enough to
+play with — see *`state()` — what to expose* in
+`references/contract.md`, the fault that blocked this work in three prototypes
+out of four — caused, it turned out, by an instruction on that very page.
+
+Worked examples, with what each race found: [`examples/differential/`](../examples/differential/)
+and [`examples/night-shift/`](../examples/night-shift/).
 
 ## What it does not check
 

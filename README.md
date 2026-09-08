@@ -197,6 +197,13 @@ first frame drew — so every screenshot for weeks was taken from underground wi
 the scene frustum-culled to almost nothing, and an earlier "freeze the sim for
 capture" change had hidden it rather than fixed it.
 
+**Documentation is a defect surface.** Three of four game prototypes shipped a
+machine API that reported *how many* things were on screen instead of what and
+where they were, which meant the only player that could exist was a random one.
+All three got it from the same sentence in the skill's own reference — *"not the
+full entity list; a count is enough"* — and every check in the harness passed on
+it, because every check drives the game with exactly that random player.
+
 **A clean run answers the question it was asked, not the one you have.** A game
 prototype passed every check — playable, deterministic, no dead inputs, a
 lookahead player scoring 10x random — while its dominant strategy was to ignore
@@ -397,6 +404,35 @@ The policy race is the one to write first if you write only one. It caught three
 separate failures in the same table, and the third is invisible from every other
 angle: after two rounds of fixes **every policy scored the same**. What differed
 was harm — 19 a night against 10 — and the score was not looking at it.
+
+The other three prototypes from that brief were taken the same way, and are in
+[`examples/night-shift/`](playable-prototype/examples/night-shift/).
+
+<p align="center">
+  <img src="media/night-shift.png" width="940" alt="Three night-shift prototypes side by side: a corridor of call bells, a grid ward of beds, and four ward cards with arrival traces">
+  <br><em>Call Bell · Rounds · Charge Nurse. Red rings mark what you cannot leave, the pips under each bed are what it will cost you, and the traces on the ward cards are the swell you are betting on — none of which existed before a policy race asked what the decisions actually were.</em>
+</p>
+
+All three passed the harness cleanly and all three were broken:
+
+- **Rounds** called itself a routing puzzle. **Every policy scored exactly 38, lost
+  nobody and reached dawn twelve nights out of twelve** — including one written to
+  refuse to cross the only gap between its two corridors.
+- **Call Bell** promised bells ringing faster than you can walk. A nearest-door
+  player answered 15 of 16 and spent a seventh of the shift standing still. Once
+  that was fixed, four different policies scored 19, 19, 19 and 19: one server on
+  a corridor makes distance the whole answer unless the calls differ in worth.
+- **Charge Nurse** said every command is a bet placed a minute before it pays off.
+  Giving *one* order at handover and never touching the controls again beat every
+  policy that managed anything, because the arrival rates were fixed — there was
+  nothing to bet on — and the floor was saturated, which makes every reassignment
+  pure loss.
+
+Before any of that could be measured, three of the four had to be opened up at
+all. Their `state()` returned a count of live calls and the worst timer, so the
+only player that could exist was a random one — and `references/contract.md` was
+where they got the idea, in a sentence that said a count is enough. That sentence
+is now the section arguing the opposite.
 
 ### frontend-qa
 

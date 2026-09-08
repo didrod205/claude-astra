@@ -1,0 +1,315 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Charge Nurse — night shift D</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body { margin:0; min-height:100%; background:#0b0e13; display:grid; place-content:center;
+              font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#c3cddb; }
+  canvas { background:#11151d; border-radius:12px; display:block; touch-action:none; max-width:100%; height:auto; }
+  #bar { display:flex; justify-content:space-between; padding:8px 4px; letter-spacing:.03em; }
+  #bar b { font-weight:600; color:#e6edf6; }
+  #hint { text-align:center; color:#5f6b7c; padding-top:8px; max-width:700px; }
+</style>
+
+<div>
+  <div id="bar"><span id="clock">23:00</span><span id="score">cleared <b>0</b></span><span id="lives">diverted <b>0</b></span></div>
+  <canvas id="c" width="700" height="470"></canvas>
+  <div id="hint">1–4 send a nurse to that ward (they take a minute to walk) · B sends your most tired nurse for a break · nobody dies tonight — the shift just ends · Space start</div>
+</div>
+
+<script>
+/* ======================================================================
+   D — CHARGE NURSE.  Axis: control = indirect, failure = none.
+   You never touch a patient. You have three nurses, four wards and one
+   night, and every command is a bet placed a minute before it pays off.
+   Nothing kills you here; the clock simply runs out and you find out how
+   many people got seen. Build-then-watch, not reflex.
+   ====================================================================== */
+
+const W = 700, H = 470, DAWN = 900, TRAVEL = 14, BREAKWALK = 8, DIVERT_AT = 10;
+const WARDS = ['A&E', 'MEDICAL', 'SURGICAL', 'MATERNITY'];
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+
+let rngState = 1;
+const rnd = () => {
+  rngState |= 0; rngState = (rngState + 0x6D2B79F5) | 0;
+  let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const ri = n => Math.floor(rnd() * n);
+
+const NAMES = ['PRIYA', 'TOM', 'ADAEZE'];
+let G;
+const fresh = () => ({
+  status: 'menu', tick: 0, score: 0, diverted: 0, flash: 0, last: 'handover',
+  wards: WARDS.map(() => ({ tasks: 0, acc: 0, base: 6, rate: 6, was: 6, phase: 0, spill: 0, hist: [] })),
+  nurses: [ { ward: 0, travel: 0, stam: 100, acc: 0 },
+            { ward: 1, travel: 0, stam: 100, acc: 0 },
+            { ward: -1, travel: 0, stam: 100, acc: 0 } ],
+});
+G = fresh();
+
+function setup() {                      // the only randomised thing: tonight's mix
+  // Three nurses clear about 0.33 tasks a tick between them. At the old rates
+  // the four wards produced about 0.32 and every ward was permanently behind,
+  // and a saturated floor is one where moving anybody is pure loss — there is
+  // always work where you already stand. Which is why parking two nurses in
+  // A&E at handover and never touching the controls again beat every policy
+  // that managed anything. Demand now averages well under capacity and swings
+  // hard, so wards genuinely run dry, and a nurse standing in a quiet one is
+  // the mistake the game is about.
+  const base = [8, 3, 6, 2];         // A&E floods; maternity is a rumour
+  for (let i = 0; i < 4; i++) {
+    G.wards[i].base = G.wards[i].rate = G.wards[i].was = base[i] + ri(3);
+    G.wards[i].phase = rnd();
+    G.wards[i].tasks = 1 + ri(3);
+  }
+}
+
+// A night is not stationary, and the game depended on it being one. With fixed
+// arrival rates the whole thing was a single order given at handover: put
+// everyone in A&E and never touch the controls again scored 152 against 107-127
+// for every policy that actually managed the floor. A command is only a bet if
+// the thing you are betting on can change. So each ward has its own slow swell,
+// out of phase with the others — A&E quietens while surgical wakes up — and the
+// board shows the direction, because a bet you cannot read is a coin toss.
+const WAVE = 340;
+function drift() {
+  for (const w of G.wards) {
+    w.was = w.rate;
+    const s = 0.5 + 0.5 * Math.sin(2 * Math.PI * (G.tick / WAVE + w.phase));
+    w.rate = Math.max(0.2, w.base * (0.15 + 1.75 * s * s));   // squared: quiet most of the night, then a rush
+    if (G.tick % 6 === 0) { w.hist.push(w.rate); if (w.hist.length > 60) w.hist.shift(); }
+  }
+}
+
+function sendTo(n, ward, travel) {
+  const nu = G.nurses[n];
+  nu.ward = ward; nu.travel = travel; nu.acc = 0;
+}
+
+function command(a) {
+  if (a === 'pool') {
+    let pick = -1;
+    for (let i = 0; i < G.nurses.length; i++) {
+      const nu = G.nurses[i];
+      if (nu.ward < 0) continue;
+      if (pick < 0 || nu.stam < G.nurses[pick].stam) pick = i;
+    }
+    if (pick < 0) { G.last = 'everyone is already off the floor'; return; }
+    sendTo(pick, -1, BREAKWALK);
+    G.last = NAMES[pick] + ' — go and sit down for ten';
+    return;
+  }
+  const target = +a.slice(1) - 1;
+  if (!(target >= 0 && target < 4)) return;
+  let pick = -1;
+  for (let i = 0; i < G.nurses.length; i++) {          // a rested nurse off the floor first
+    const nu = G.nurses[i];
+    if (nu.ward === -1 && nu.travel === 0 && (pick < 0 || nu.stam > G.nurses[pick].stam)) pick = i;
+  }
+  if (pick < 0) for (let i = 0; i < G.nurses.length; i++) {   // else pull from the quietest ward
+    const nu = G.nurses[i];
+    if (nu.ward === target) continue;
+    if (pick < 0) { pick = i; continue; }
+    const a1 = G.nurses[pick].ward < 0 ? -1 : G.wards[G.nurses[pick].ward].tasks;
+    const a2 = nu.ward < 0 ? -1 : G.wards[nu.ward].tasks;
+    if (a2 < a1) pick = i;
+  }
+  if (pick < 0) { G.last = 'all three are already in ' + WARDS[target]; return; }
+  sendTo(pick, target, TRAVEL);
+  G.last = NAMES[pick] + ' -> ' + WARDS[target];
+}
+
+function update() {
+  if (G.status !== 'playing') return;
+  G.tick++;
+  if (G.flash > 0) G.flash--;
+
+  drift();
+  for (const w of G.wards) {
+    w.acc += w.rate;
+    while (w.acc >= 100) { w.acc -= 100; w.tasks++; }
+    if (w.spill > 0) w.spill--;
+    if (w.tasks >= DIVERT_AT) {           // nobody dies — they go somewhere else
+      w.tasks -= 6; G.diverted += 6; w.spill = 90; G.flash = 12;
+      G.last = 'ambulance diverted from ' + WARDS[G.wards.indexOf(w)];
+    }
+  }
+
+  for (const nu of G.nurses) {
+    if (nu.travel > 0) { nu.travel--; continue; }
+    if (nu.ward < 0) {
+      if (G.tick % 2 === 0 && nu.stam < 100) nu.stam++;
+      continue;
+    }
+    const w = G.wards[nu.ward];
+    if (w.tasks > 0) {
+      // A ward that has just turned ambulances away is not a calm ward: the
+      // handover, the complaints, the bed moves. Diverting used to be free —
+      // better than free, since it capped the queue — so "the shift just gets
+      // worse" was a line in a comment and nowhere in the game.
+      nu.acc += (nu.stam > 25 ? 11 : 5) * (w.spill > 0 ? 0.55 : 1);
+      if (G.tick % 3 === 0 && nu.stam > 0) nu.stam--;
+      while (nu.acc >= 100 && w.tasks > 0) { nu.acc -= 100; w.tasks--; G.score++; }
+    }
+  }
+
+  if (G.tick >= DAWN) G.status = 'over';
+}
+
+/* ------------------------------------------------------------- drawing */
+const dom = {}, el = {};
+const setTxt = (id, v) => { if (dom[id] === v) return; dom[id] = v;
+  (el[id] || (el[id] = document.getElementById(id))).textContent = v; };
+
+function clockText(t) {
+  const m = 23 * 60 + Math.floor((t / DAWN) * 8 * 60);
+  return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+
+function draw() {
+  ctx.fillStyle = '#11151d'; ctx.fillRect(0, 0, W, H);
+  if (G.flash > 0) { ctx.fillStyle = 'rgba(224,161,60,' + (G.flash / 90) + ')'; ctx.fillRect(0, 0, W, H); }
+
+  for (let i = 0; i < 4; i++) {
+    const w = G.wards[i], x = 24 + i * 168, y = 40;
+    ctx.fillStyle = w.spill > 0 ? '#2a2118' : '#161d28';
+    ctx.beginPath(); ctx.roundRect(x, y, 152, 224, 10); ctx.fill();
+    ctx.fillStyle = '#e6edf6'; ctx.font = '600 13px ui-monospace,monospace'; ctx.textAlign = 'left';
+    ctx.fillText((i + 1) + ' · ' + WARDS[i], x + 14, y + 26);
+    // The whole bet is on where the work is GOING, so the swell has to be
+    // legible: the rate, which way it is moving, and a trace of the last while.
+    const up = w.rate > w.was + 0.002, down = w.rate < w.was - 0.002;
+    ctx.fillStyle = up ? '#e0a13c' : down ? '#5f7f6a' : '#4d5768';
+    ctx.font = '10px ui-monospace,monospace';
+    ctx.fillText((up ? '▲' : down ? '▼' : '·') + ' ' + w.rate.toFixed(1) + ' in', x + 14, y + 42);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = w.tasks >= DIVERT_AT - 2 ? '#e05a4a' : '#7f93aa';
+    ctx.fillText(w.tasks + ' waiting', x + 138, y + 42);
+    ctx.textAlign = 'left';
+
+    // the last 60 samples of the arrival rate, so a rush is visible coming
+    ctx.strokeStyle = 'rgba(120,170,220,.35)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (let k = 0; k < w.hist.length; k++) {
+      const hx = x + 14 + k * (124 / 59), hy = y + 70 - (w.hist[k] / (w.base * 1.9)) * 18;
+      k ? ctx.lineTo(hx, hy) : ctx.moveTo(hx, hy);
+    }
+    ctx.stroke();
+    if (w.spill > 0) {                            // and it works at half speed until it settles
+      ctx.textAlign = 'center'; ctx.fillStyle = '#c08a3c'; ctx.font = '9px ui-monospace,monospace';
+      ctx.fillText('DIVERTED — HALF SPEED', x + 76, y + 218); ctx.textAlign = 'left';
+    }
+
+    // waiting stack — one bar per patient, ten and the ambulance turns round
+    for (let k = 0; k < DIVERT_AT; k++) {
+      ctx.fillStyle = k < w.tasks ? (w.tasks >= DIVERT_AT - 2 ? '#e05a4a' : w.tasks >= 6 ? '#e0a13c' : '#5fb4e0') : 'rgba(255,255,255,.05)';
+      ctx.fillRect(x + 14, y + 197 - k * 14, 124, 10);
+    }
+  }
+
+  // break room
+  ctx.fillStyle = '#141a23'; ctx.beginPath(); ctx.roundRect(24, 316, 652, 70, 10); ctx.fill();
+  ctx.fillStyle = '#4d5768'; ctx.font = '10px ui-monospace,monospace';
+  ctx.fillText('B · BREAK ROOM', 38, 336);
+
+  for (let i = 0; i < G.nurses.length; i++) {
+    const nu = G.nurses[i];
+    const homeX = nu.ward < 0 ? 150 + i * 120 : 24 + nu.ward * 168 + 40 + i * 34;
+    const homeY = nu.ward < 0 ? 354 : 282;      // staff row, clear of the stacks
+    ctx.globalAlpha = nu.travel > 0 ? 0.45 : 1;
+    ctx.fillStyle = nu.stam > 25 ? '#dfe6f0' : '#8b7b6a';
+    ctx.beginPath(); ctx.arc(homeX, homeY, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#11151d'; ctx.font = '600 10px ui-monospace,monospace'; ctx.textAlign = 'center';
+    ctx.fillText(NAMES[i][0], homeX, homeY + 4);
+    ctx.globalAlpha = 1;
+    // stamina ring
+    ctx.strokeStyle = nu.stam > 25 ? 'rgba(125,219,160,.7)' : 'rgba(224,90,74,.8)';
+    ctx.lineWidth = 3; ctx.beginPath();
+    ctx.arc(homeX, homeY, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (nu.stam / 100)); ctx.stroke();
+    if (nu.travel > 0) {
+      ctx.fillStyle = '#e0a13c'; ctx.font = '9px ui-monospace,monospace';
+      ctx.fillText('walking', homeX, homeY + 30);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // shift bar
+  ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(24, 396, 652, 7);
+  ctx.fillStyle = '#5fb4e0'; ctx.fillRect(24, 396, 652 * Math.min(1, G.tick / DAWN), 7);
+  ctx.fillStyle = '#5f6b7c'; ctx.font = '11px ui-monospace,monospace';
+  ctx.fillText(G.last, 24, 424);
+  ctx.fillStyle = '#3c4759'; ctx.font = '10px ui-monospace,monospace';
+  ctx.fillText('cleared ' + G.score + '  ·  diverted ' + G.diverted, 24, 444);
+
+  if (G.status !== 'playing') {
+    ctx.fillStyle = 'rgba(9,12,17,.86)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#e9eff7';
+    ctx.font = '600 30px ui-sans-serif,system-ui,sans-serif';
+    ctx.fillText(G.status === 'menu' ? 'CHARGE NURSE' : '07:00 — handover', W / 2, H / 2 - 16);
+    ctx.font = '13px ui-monospace,monospace'; ctx.fillStyle = '#93a1b3';
+    ctx.fillText(G.status === 'menu'
+      ? 'three nurses, four wards, one night — press Space'
+      : `${G.score} people seen · ${G.diverted} sent elsewhere — press Space`, W / 2, H / 2 + 14);
+    ctx.textAlign = 'left';
+  }
+
+  setTxt('clock', clockText(G.tick));
+  setTxt('score', 'cleared ' + G.score);
+  setTxt('lives', 'diverted ' + G.diverted);
+}
+
+/* ------------------------------------------------------------ contract */
+const api = {
+  actions: ['w1', 'w2', 'w3', 'w4', 'pool', 'start'],
+  state: () => ({
+    status: G.status, tick: G.tick, score: G.score, diverted: G.diverted,
+    t0: G.wards[0].tasks, t1: G.wards[1].tasks, t2: G.wards[2].tasks, t3: G.wards[3].tasks,
+    n0: G.nurses[0].ward, n1: G.nurses[1].ward, n2: G.nurses[2].ward,
+    stam: Math.min(G.nurses[0].stam, G.nurses[1].stam, G.nurses[2].stam),
+    // The screen shows three named nurses, where each one is, how tired they
+    // are and whether they are still walking. The state showed the wards and
+    // the single lowest stamina, which cannot answer "is anyone actually free"
+    // — a nurse fourteen ticks into a corridor looks identical to one already
+    // working.
+    wards: G.wards.map((w, i) => ({ i, name: WARDS[i], tasks: w.tasks, rate: +w.rate.toFixed(2),
+                                    rising: w.rate > w.was, spill: w.spill, divertAt: DIVERT_AT })),
+    nurses: G.nurses.map((n, i) => ({ i, name: NAMES[i], ward: n.ward, travel: n.travel, stam: n.stam })),
+  }),
+  input(a, down = true) {
+    if (a === 'start') { if (down && G.status !== 'playing') api.start(); return; }
+    if (down && G.status === 'playing') command(a);
+  },
+  start() { const keep = rngState; G = fresh(); rngState = keep; G.status = 'playing'; setup(); },
+  reset() { G = fresh(); },
+  seed(n) { rngState = n | 0; },
+  step(n = 1) { for (let i = 0; i < n; i++) update(); draw(); },
+};
+window.__game = api;
+
+/* --------------------------------------------------------- human input */
+const bind = m => { const t = {}; for (const k in m) { t[k] = m[k];
+  if (/^Key[A-Z]$/.test(k)) { t[k[3].toLowerCase()] = m[k]; t[k[3]] = m[k]; }
+  if (/^Digit[0-9]$/.test(k)) t[k[5]] = m[k];
+  if (k === 'Space') t[' '] = m[k]; } return t; };
+const KEYS = bind({ Digit1: 'w1', Digit2: 'w2', Digit3: 'w3', Digit4: 'w4', KeyB: 'pool', Space: 'start' });
+addEventListener('keydown', e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) { e.preventDefault(); api.input(a, true); } });
+addEventListener('keyup',   e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) api.input(a, false); });
+cv.addEventListener('pointerdown', e => {
+  if (G.status !== 'playing') { api.input('start', true); return; }
+  const r = cv.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (W / r.width), py = (e.clientY - r.top) * (H / r.height);
+  if (py > 310) api.input('pool', true);
+  else { const i = Math.floor((px - 24) / 168); if (i >= 0 && i < 4) api.input('w' + (i + 1), true); }
+});
+
+api.seed(Date.now() & 0x7fffffff);
+let acc = 0, last = performance.now();
+(function loop(now) {
+  acc += Math.min(Math.max(now - last, 0), 100); last = now;
+  while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+  draw(); requestAnimationFrame(loop);
+})(last);
+</script>

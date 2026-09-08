@@ -1,0 +1,289 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Call Bell — night shift A</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body { margin:0; min-height:100%; background:#0b0e13; display:grid; place-content:center;
+              font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#c3cddb; }
+  canvas { background:#11151d; border-radius:12px; display:block; touch-action:none; max-width:100%; height:auto; }
+  #bar { display:flex; justify-content:space-between; padding:8px 4px; letter-spacing:.03em; }
+  #bar b { font-weight:600; color:#e6edf6; }
+  #hint { text-align:center; color:#5f6b7c; padding-top:8px; }
+</style>
+
+<div>
+  <div id="bar"><span id="clock">23:00</span><span id="score">answered <b>0</b></span><span id="lives">falls left <b>4</b></span></div>
+  <canvas id="c" width="720" height="470"></canvas>
+  <div id="hint">← → walk the corridor · hold ↓ (or S) to attend the door you are standing at · Space start / restart</div>
+</div>
+
+<script>
+/* ======================================================================
+   A — CALL BELL.  Axis: pressure = pure reflex, control = continuous.
+   Six doors, one nurse, one pair of hands. Bells ring faster than you can
+   walk. Every call has a fuse; let three burn down and the shift is over.
+   ====================================================================== */
+
+const W = 720, H = 470, ROOMS = 6, RW = W / ROOMS;
+const DAWN = 1000;                 // 23:00 -> 07:00
+// Four kinds of call that differ in what they cost you and how long they will
+// wait. They used to be four labels over identical mechanics, which made the
+// word on the door decoration — and made "which of these do I abandon" a
+// question about distance and nothing else. A wandering patient will be on the
+// floor in under two minutes and takes a moment to walk back; someone in pain
+// will wait, and then takes a long time.
+const REACH = 52;                  // how close to the door you must stand
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+
+let rngState = 1;
+const rnd = () => {
+  rngState |= 0; rngState = (rngState + 0x6D2B79F5) | 0;
+  let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+// And they differ in what it costs to miss one. With every call worth the same
+// point and every miss costing the same life, nearest-door was optimal and the
+// four other policies scored identically to it — one server on a corridor makes
+// distance the whole answer, so the choice the game is named after was not a
+// choice. Someone on the floor is not a call bell nobody answered.
+const KINDS = [
+  { name: 'call bell', work:  45, fuse: 300, hurts: false },
+  { name: 'IV alarm',  work:  60, fuse: 155, hurts: true  },
+  { name: 'in pain',   work: 110, fuse: 250, hurts: false },
+  { name: 'wandering', work:  70, fuse: 115, hurts: true  },
+  // Not a call anyone makes — what a missed one turns into. Dropping a patient
+  // scored BETTER than catching them: nearest-door answered 19 calls to
+  // falls-first's 17 while putting three people on the floor against one, and
+  // the number on the wall preferred it. So the penalty is paid in the currency
+  // the game is actually played in. Someone on the floor has to be picked up,
+  // and it takes longer than the call you saved by walking past.
+  { name: 'on the floor', work: 150, fuse: 420, hurts: false },
+];
+const FLOOR = 4;
+let G;
+const fresh = () => ({
+  status: 'menu', tick: 0, score: 0, lives: 4, unanswered: 0, x: 2.5 * RW, face: 1,   // standing AT a door, not between two
+  rooms: Array.from({ length: ROOMS }, () => ({ need: 0, left: 0, fuse: 1, work: 0, kind: 0 })),
+  ok: 0, bad: 0, bob: 0,
+});
+G = fresh();
+const held = { left: false, right: false, attend: false };
+const clearHeld = () => { held.left = held.right = held.attend = false; };
+
+function ringAt(i) {
+  const r = G.rooms[i];
+  if (r.need) return;
+  r.need = 1; r.work = 0;
+  r.kind = Math.floor(rnd() * FLOOR);           // the fifth is not a call, it is a consequence
+  // Counted DOWN, in ticks, because that is the quantity the decision turns on.
+  // The bar used to fill with elapsed time at a hidden speed, so two calls at
+  // the same fill could be a hundred ticks apart and there was no way to tell
+  // which one was about to go.
+  r.fuse = r.left = Math.round(KINDS[r.kind].fuse * (0.85 + rnd() * 0.3));
+}
+function ring() {
+  const idle = [];
+  for (let i = 0; i < ROOMS; i++) if (!G.rooms[i].need) idle.push(i);
+  if (!idle.length) return;
+  ringAt(idle[Math.floor(rnd() * idle.length)]);
+}
+
+function update() {
+  if (G.status !== 'playing') return;
+  G.tick++;
+  if (G.ok > 0) G.ok--;
+  if (G.bad > 0) G.bad--;
+
+  const sp = 4.0;                     // one bay = exactly 30 ticks of walking
+  if (held.left && !held.right) { G.x -= sp; G.face = -1; }
+  if (held.right && !held.left) { G.x += sp; G.face = 1; }
+  if (G.x < 28) G.x = 28;
+  if (G.x > W - 28) G.x = W - 28;
+  if (held.left !== held.right) G.bob = (G.bob + 1) % 24;
+
+  // The premise is that bells ring faster than you can walk. They did not: a
+  // nearest-door policy answered 15 of about 16 calls, reached dawn on twelve
+  // nights out of twelve and lost one patient, and spent a seventh of the shift
+  // standing still with nothing ringing. Serving a call costs about 18 ticks of
+  // attention and 30 of corridor, so the shift has room for roughly 21 — and
+  // arrivals now outrun that.
+  const every = Math.max(26, 62 - Math.floor(G.tick / 150) * 6);
+  if (G.tick % every === 0) ring();
+
+  for (let i = 0; i < ROOMS; i++) {
+    const r = G.rooms[i];
+    if (!r.need) continue;
+    if (--r.left <= 0) {                        // fuse burnt down
+      const hurt = KINDS[r.kind].hurts;
+      r.work = 0;
+      if (hurt) {
+        G.lives--; G.bad = 18;
+        r.kind = FLOOR; r.fuse = r.left = KINDS[FLOOR].fuse;   // still ringing, and now it is worse
+      } else { r.need = 0; r.left = 0; G.unanswered++; G.bad = 8; }
+    }
+  }
+
+  if (held.attend) {
+    const i = Math.min(ROOMS - 1, Math.max(0, Math.floor(G.x / RW)));
+    const r = G.rooms[i];
+    if (r.need && Math.abs(G.x - (i + 0.5) * RW) < REACH) {
+      r.work += 4;
+      if (r.work >= KINDS[r.kind].work) { r.need = 0; r.left = 0; r.work = 0; G.score++; G.ok = 14; }
+    }
+  }
+
+  if (G.lives <= 0) { G.lives = 0; G.status = 'over'; }
+  else if (G.tick >= DAWN) G.status = 'over';
+}
+
+/* ------------------------------------------------------------- drawing */
+const dom = {}, el = {};
+const setTxt = (id, v) => { if (dom[id] === v) return; dom[id] = v;
+  (el[id] || (el[id] = document.getElementById(id))).textContent = v; };
+
+const clockText = t => {
+  const m = 23 * 60 + Math.floor((t / DAWN) * 8 * 60);
+  return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+};
+
+function draw() {
+  ctx.fillStyle = '#11151d'; ctx.fillRect(0, 0, W, H);
+
+  // corridor floor
+  const fy = 300;
+  ctx.fillStyle = '#161c26'; ctx.fillRect(0, fy, W, H - fy);
+  ctx.strokeStyle = 'rgba(255,255,255,.035)'; ctx.lineWidth = 1;
+  for (let i = 0; i <= ROOMS; i++) { ctx.beginPath(); ctx.moveTo(i * RW, 60); ctx.lineTo(i * RW, H); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(120,170,220,.05)'; ctx.fillRect(0, fy, W, 5);
+
+  for (let i = 0; i < ROOMS; i++) {
+    const r = G.rooms[i], cx = (i + 0.5) * RW;
+    // room box
+    ctx.fillStyle = r.need ? '#1d2330' : '#151b25';
+    ctx.beginPath(); ctx.roundRect(i * RW + 10, 68, RW - 20, 200, 8); ctx.fill();
+    // bed
+    ctx.fillStyle = '#232c3a'; ctx.beginPath();
+    ctx.roundRect(cx - 30, 120, 60, 84, 6); ctx.fill();
+    ctx.fillStyle = r.need ? '#3d4a60' : '#2c3646';
+    ctx.beginPath(); ctx.roundRect(cx - 22, 126, 44, 26, 5); ctx.fill();
+    // call light above the door — ringed when missing it hurts someone
+    if (r.need && KINDS[r.kind].hurts) {
+      ctx.beginPath(); ctx.arc(cx, 88, 11, 0, Math.PI * 2);
+      ctx.strokeStyle = '#e05a4a'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(cx, 88, 7, 0, Math.PI * 2);
+    ctx.fillStyle = !r.need ? '#242c39' : r.kind === FLOOR ? '#8d4a5a'
+                  : r.left < 45 ? '#e05a4a' : r.left < 110 ? '#e0a13c' : '#5fb4e0';
+    ctx.fill();
+    if (r.need) {
+      // fuse bar
+      ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(cx - 38, 224, 76, 7);
+      ctx.fillStyle = r.kind === FLOOR ? '#8d4a5a'
+                    : r.left < 45 ? '#e05a4a' : r.left < 110 ? '#e0a13c' : '#5fb4e0';
+      ctx.fillRect(cx - 38, 224, 76 * (r.left / r.fuse), 7);
+      // work bar
+      ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(cx - 38, 236, 76, 5);
+      ctx.fillStyle = '#7ddba0'; ctx.fillRect(cx - 38, 236, 76 * (r.work / KINDS[r.kind].work), 5);
+      ctx.fillStyle = '#8d9cb0'; ctx.font = '10px ui-monospace,monospace'; ctx.textAlign = 'center';
+      ctx.fillText(KINDS[r.kind].name, cx, 254);
+      ctx.fillStyle = '#4d5768'; ctx.font = '9px ui-monospace,monospace';
+      ctx.fillText(Math.ceil(r.left / 4) + 's left', cx, 267);
+      ctx.fillText(Math.ceil((KINDS[r.kind].work - r.work) / 4) + 's work', cx, 278);
+    }
+    // doorway
+    ctx.fillStyle = '#0e131b'; ctx.fillRect(cx - 26, 288, 52, 26);
+    ctx.fillStyle = '#39445a'; ctx.font = '10px ui-monospace,monospace'; ctx.textAlign = 'center';
+    ctx.fillText('bay ' + (i + 1), cx, 306);
+  }
+
+  // nurse
+  const ny = fy + 62, hop = (held.left !== held.right) && G.bob % 12 < 6 ? -2 : 0;
+  ctx.fillStyle = G.bad > 0 ? '#e05a4a' : G.ok > 0 ? '#7ddba0' : '#dfe6f0';
+  ctx.beginPath(); ctx.roundRect(G.x - 11, ny - 26 + hop, 22, 34, 8); ctx.fill();
+  ctx.beginPath(); ctx.arc(G.x, ny - 34 + hop, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#0b0e13'; ctx.fillRect(G.x - 11, ny - 26 + hop, 22, 5);
+  if (held.attend) {
+    ctx.strokeStyle = 'rgba(125,219,160,.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(G.x, ny - 14 + hop, 26 + (G.tick % 12), 0, Math.PI * 2); ctx.stroke();
+  }
+
+  if (G.status !== 'playing') {
+    ctx.fillStyle = 'rgba(9,12,17,.85)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#e9eff7';
+    ctx.font = '600 30px ui-sans-serif,system-ui,sans-serif';
+    ctx.fillText(G.status === 'menu' ? 'CALL BELL' : (G.lives > 0 ? '07:00 — handover' : 'shift abandoned'), W / 2, H / 2 - 16);
+    ctx.font = '13px ui-monospace,monospace'; ctx.fillStyle = '#93a1b3';
+    ctx.fillText(G.status === 'menu'
+      ? 'six bays, one nurse, eight hours — press Space'
+      : `answered ${G.score} calls · ${5 - G.lives} crash calls — press Space`, W / 2, H / 2 + 14);
+  }
+
+  setTxt('clock', clockText(G.tick));
+  setTxt('score', 'answered ' + G.score);
+  setTxt('lives', 'falls left ' + G.lives);
+  setTxt('score', 'answered ' + G.score + (G.unanswered ? '  ·  ' + G.unanswered + ' gave up' : ''));
+}
+
+/* ------------------------------------------------------------ contract */
+const api = {
+  actions: ['left', 'right', 'attend', 'start'],
+  state: () => {
+    let needs = 0, worst = 0;
+    for (const r of G.rooms) if (r.need) { needs++; if (!worst || r.left < worst) worst = r.left; }
+    return { status: G.status, tick: G.tick, score: G.score, lives: G.lives, unanswered: G.unanswered,
+             x: +G.x.toFixed(2), needs, worst,
+             // The screen shows six doors, each with how far its fuse has burnt
+             // and how much of the job is done. The state used to show a count
+             // and a maximum, which is not enough to play the game with: you
+             // cannot answer "which door, and is it worth crossing the corridor
+             // for" from a number of bells and the worst of them. A machine API
+             // that carries less than the screen does is not a machine API for
+             // this game.
+             rooms: G.rooms.map((r, i) => ({
+               bay: i + 1, x: (i + 0.5) * RW, need: !!r.need,
+               left: r.left, work: r.work, kind: KINDS[r.kind].name,
+               toGo: KINDS[r.kind].work - r.work, hurts: KINDS[r.kind].hurts,
+               inReach: Math.abs(G.x - (i + 0.5) * RW) < REACH,
+             })) };
+  },
+  input(a, down = true) {
+    if (a === 'start') { if (down && G.status !== 'playing') api.start(); return; }
+    if (a in held) held[a] = down;
+  },
+  start() {
+    const keep = rngState; G = fresh(); rngState = keep; clearHeld(); G.status = 'playing';
+    ringAt(Math.min(ROOMS - 1, Math.max(0, Math.floor(G.x / RW))));   // handover hands you a live bell
+    ring();
+  },
+  reset() { G = fresh(); clearHeld(); },
+  seed(n) { rngState = n | 0; },
+  step(n = 1) { for (let i = 0; i < n; i++) update(); draw(); },
+};
+window.__game = api;
+
+/* --------------------------------------------------------- human input */
+const bind = m => { const t = {}; for (const k in m) { t[k] = m[k];
+  if (/^Key[A-Z]$/.test(k)) { t[k[3].toLowerCase()] = m[k]; t[k[3]] = m[k]; }
+  if (k === 'Space') t[' '] = m[k]; } return t; };
+const KEYS = bind({ ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
+                    ArrowDown: 'attend', KeyS: 'attend', Space: 'start' });
+addEventListener('keydown', e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) { e.preventDefault(); api.input(a, true); } });
+addEventListener('keyup',   e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) api.input(a, false); });
+cv.addEventListener('pointerdown', e => {
+  if (G.status !== 'playing') { api.input('start', true); return; }
+  const r = cv.getBoundingClientRect(), px = (e.clientX - r.left) * (W / r.width);
+  api.input(px < G.x - 20 ? 'left' : px > G.x + 20 ? 'right' : 'attend', true);
+});
+addEventListener('pointerup', () => { clearHeld(); });
+
+api.seed(Date.now() & 0x7fffffff);
+let acc = 0, last = performance.now();
+(function loop(now) {
+  acc += Math.min(Math.max(now - last, 0), 100); last = now;
+  while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+  draw(); requestAnimationFrame(loop);
+})(last);
+</script>
