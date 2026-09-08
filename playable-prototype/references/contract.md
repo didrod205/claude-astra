@@ -90,8 +90,24 @@ function update() {
 }
 ```
 
-`step(n)` then advances at most n turns, which is exactly what you want — a
-bot's 1800 ticks becomes 1800 attempted moves.
+**Watch the turn-per-tick ratio.** The harness holds one action for 15 ticks and
+this pattern consumes `pending` once, so a bot's 1800 ticks buys **120 moves, not
+1800** — a turn-based prototype gets a fifteenth of the play a real-time one
+does, dies in the first quarter of its shift, and reads as shallow for no design
+reason. Either give a held action auto-repeat:
+
+```js
+let pending = null, held = null, since = 0;
+api.input = (a, down) => { if (down) { pending = a; held = a; } else if (held === a) held = null; };
+function update() {
+  if (G.status !== 'playing') return;
+  if (!pending && held && ++since >= 8) pending = held;      // a turn every 8 ticks
+  if (!pending) return;
+  applyMove(pending); pending = null; since = 0; G.tick++;
+}
+```
+
+…or size the game so a shift fits in the tick budget at one turn per 15.
 
 **Physics.** Fixed timestep is already the correct way to do physics; you get
 determinism for free. Never scale a velocity by a frame delta.
@@ -125,6 +141,7 @@ the DOM sees stale values against working code. Keep `state()` authoritative.
 | unrounded floats in `state()` | `determinism`, confusingly |
 | an action declared but never read in `update()` | `input` — dead action |
 | `input()` writes a variable `update()` doesn't read | `input` — dead action |
+| an action with nothing to act on in the first 2 seconds | `input` — dead action. The check holds each action for 120 ticks **from a fresh start**, so every declared action must have a valid target by then. A bell that first rings at tick 96, or a player who starts out of reach of anything, both read as a dead input |
 | scoring only on a condition a bot can't reach | `playable` — bot scored 0 |
 | `start()` doesn't set `status` to `'playing'` | `run` — tick never advanced |
 | `step()` calls `requestAnimationFrame` instead of `update()` | `run` — tick never advanced |

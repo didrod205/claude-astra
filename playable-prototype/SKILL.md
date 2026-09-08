@@ -108,10 +108,10 @@ Exit 0 clean · 1 warnings · 2 something is not playable. What it checks:
 | `input` | an action in `actions` changes nothing. Skipped, and said to be skipped, if the run isn't deterministic |
 | `playable` | a random bot scores 0 on every seed |
 | `balance` (warn) | scores swing more than 5x across seeds — the seed decides, not the player |
-| `depth` (warn) | a shallow lookahead player does no better than random |
+| `depth` (warn) | a shallow lookahead player never beats random on any seed |
 | `run` | `tick` never advances |
 | `design` (warn) | doing nothing forever never ends the game |
-| `perf` (warn) | over 400 ms per 1000 ticks — won't hold 60 fps |
+| `perf` (warn) | a step+draw costs over 4 ms — a quarter of a 60 fps frame |
 | `console` | any page error |
 
 **The random-bot score is the load-bearing check.** A bot pressing buttons at
@@ -125,13 +125,19 @@ else — replay from the seed with a different next action — and so measure ho
 much better a player who looks one step ahead does than one pressing at random:
 
 ```
-a-beam    same seed: random 7 vs lookahead 11 (1.6x)   ← there is a decision here
-c-buoys   same seed: random 9 vs lookahead  9 (1.0x)   ← flagged
+c-differential   random 6 vs lookahead 24 over 3 seeds (3.7x)   ← a lot to get good at
+nodepth          never beat random on any of 3 seeds (20/20/20 vs 20/20/20)  ← flagged
 ```
 
 That is the question a prototyping pass exists to answer, and it is not
 answerable by playing the thing once. Read `references/playtest.md` for how to
 act on each result, and for the two very different reasons a 1.0x can appear.
+
+It is also only the question **against a random player**. If you go on to develop
+one of these past its first clean run, that stops being enough: see *Past the
+first clean run* in `references/playtest.md`, and `examples/differential/` for a
+prototype that passed with a 10x lookahead score while its dominant strategy was
+to ignore every mechanic it had.
 
 The `--out` screenshots are for you to look at, not proof of anything. The
 harness cannot see that the player sprite is behind the background.

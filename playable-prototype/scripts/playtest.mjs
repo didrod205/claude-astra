@@ -232,16 +232,63 @@ try {
       // 6. does playing WELL beat playing at random? This is the prototype question.
       if (deterministic && playable.length) {
         await cdp.eval(GREEDY, { awaitPromise: false });
-        const gTicks = Math.min(TICKS, 900);
-        const gr = JSON.parse(await cdp.eval(`window.__ptGreedy(${JSON.stringify({ seed: 2024, ticks: gTicks, horizon: 30 })})`, { awaitPromise: false }));
-        const rnd = await run({ seed: 2024, ticks: gTicks, mode: 'bot', stopOnEnd: true });
-        stats.greedy = gr.best; stats.randomAt = rnd.best; stats.gradientTicks = gTicks;
-        const grad = rnd.best > 0 ? gr.best / rnd.best : (gr.best > 0 ? Infinity : 1);
-        stats.gradient = grad;
-        if (gr.best <= rnd.best)
-          add('warn', 'depth', `a shallow lookahead player did not beat random on the same seed (${gr.best} vs ${rnd.best}) — either the inputs carry no decision, or the payoff is slower than a 15-tick lookahead can see`);
-        else if (grad < 1.25)
-          add('warn', 'depth', `playing well is barely better than random (${gr.best} vs ${rnd.best}, ${grad.toFixed(2)}x on the same seed) — thin as a game`);
+        // The search costs (ticks/H) x actions x ticks simulated steps, because a
+        // replay has no snapshot to resume from and starts at zero every time. At
+        // 11 actions and 900 ticks that is 600k steps of a game that renders on
+        // every one, which overran the 120 s evaluate timeout — and a timeout in
+        // here used to mark the whole prototype unplayable, when in fact every
+        // other check had passed. So: fit the search to a step budget by
+        // shortening the game it is measured over, and say so when that happens.
+        // Both players get the same gTicks, so the comparison stays honest.
+        const BUDGET = 5e5;
+        const cost = t => (t / 15) * playable.length * t * 1.15;
+        let gTicks = Math.min(TICKS, 900);
+        while (gTicks > 150 && cost(gTicks) > BUDGET) gTicks = Math.round(gTicks * 0.8);
+        // Same cadence as the random bot — 15, as the comment in __ptGreedy and
+        // the docs both say. Passing 30 here locked the lookahead into
+        // commitments twice as long as the player it is compared against, so a
+        // game whose natural action is shorter than 30 ticks read as having no
+        // depth. The measuring instrument was dictating the design.
+        //
+        // And across seeds, like the bot score beside it: on one seed the ratio
+        // swung 4x on ordinary tuning changes.
+        const dSeeds = [2024, 2024 + 7919, 2024 + 15838];
+        const ratios = [], greedies = [], randoms = [];
+        let depthFailed = null;
+        for (const sd of dSeeds) {
+          try {
+            const g2 = JSON.parse(await cdp.eval(
+              `window.__ptGreedy(${JSON.stringify({ seed: sd, ticks: gTicks, horizon: 15 })})`,
+              { awaitPromise: false }));
+            const r2 = await run({ seed: sd, ticks: gTicks, mode: 'bot', stopOnEnd: true });
+            greedies.push(g2.best); randoms.push(r2.best);
+            ratios.push(r2.best > 0 ? g2.best / r2.best : (g2.best > 0 ? Infinity : 1));
+          } catch (e) { depthFailed = String(e.message || e); break; }
+        }
+        if (depthFailed) {
+          // Not a verdict on the game. Say which check did not run, and why.
+          add('warn', 'depth', `depth not measured — the lookahead search did not finish (${depthFailed}). ` +
+            `${playable.length} actions over ${gTicks} ticks is past what a replay search can do in the time; ` +
+            'the other checks above still hold');
+        }
+        const mid = a2 => [...a2].sort((x, y) => x - y)[a2.length >> 1];
+        if (greedies.length) {
+          stats.greedy = mid(greedies); stats.randomAt = mid(randoms);
+          stats.gradientTicks = gTicks; stats.gradientSeeds = greedies.length;
+          const grad = mid(ratios.map(v => (v === Infinity ? 1e9 : v)));
+          stats.gradient = grad >= 1e9 ? Infinity : grad;
+        }
+        // The signal is whether the lookahead EVER beats random, not by how much.
+        // One greedy choice per 15 ticks against a random tail is a weak player:
+        // ratios near 1.0 are normal for a game with real decisions in it, and
+        // warning on them flagged three of four prototypes that were fine. What
+        // is diagnostic is never winning on any seed — that is what a game whose
+        // inputs do not affect the outcome looks like, exactly.
+        const neverBetter = greedies.length && greedies.every((g3, i) => g3 <= randoms[i]);
+        if (neverBetter)
+          add('warn', 'depth', `a shallow lookahead player never beat random on any of ${dSeeds.length} seeds ` +
+            `(${greedies.join('/')} vs ${randoms.join('/')}) — either the inputs carry no decision, ` +
+            'or the payoff is slower than a 15-tick lookahead can see');
       }
 
       // Now the idle run can be judged. Idle advancing nothing while the bot run
@@ -254,11 +301,22 @@ try {
       else if (!stats.turnBased && !idle.over)
         add('warn', 'design', `doing nothing for ${idleTicks} ticks never ends the game — is there a lose condition?`);
 
-      // 6. speed
-      const t0 = Date.now();
-      await run({ seed: 1, ticks: 3000, mode: 'idle', stopOnEnd: false });
-      stats.msPer1000Ticks = Math.round((Date.now() - t0) / 3);
-      if (stats.msPer1000Ticks > 400) add('warn', 'perf', `${stats.msPer1000Ticks} ms per 1000 ticks — will not hold 60 fps`);
+      // 6. speed. Median of three after a warmup: a single bracket around one
+      //    run swung 160-404 ms on unchanged files, which flipped the warning on
+      //    and off at random. And step() renders, so this is the cost of a whole
+      //    frame, not of the update — 16.7 ms is the 60 fps budget.
+      await run({ seed: 1, ticks: 600, mode: 'idle', stopOnEnd: false });   // warm up
+      const samples = [];
+      for (let i = 0; i < 3; i++) {
+        const t0 = Date.now();
+        await run({ seed: 1 + i, ticks: 2000, mode: 'idle', stopOnEnd: false });
+        samples.push((Date.now() - t0) / 2);
+      }
+      stats.msPer1000Ticks = Math.round(samples.sort((x, y) => x - y)[1]);
+      const msPerFrame = stats.msPer1000Ticks / 1000;
+      if (msPerFrame > 4)
+        add('warn', 'perf', `${msPerFrame.toFixed(1)} ms per step+draw — ${(msPerFrame / 16.7 * 100).toFixed(0)}% ` +
+          'of a 60 fps frame budget, before the browser does anything else');
 
       // 7. shots
       if (OUT) {
@@ -300,7 +358,8 @@ else {
     const s = r.stats;
     const line = s.botScore !== undefined
       ? `random ${s.botScore} (${s.botRange?.join('–') ?? '?'} over ${SEEDS} seeds)` +
-        (s.greedy != null ? ` · same seed: random ${s.randomAt} vs lookahead ${s.greedy} (${s.gradient === Infinity ? '∞' : s.gradient.toFixed(1)}x)` : '') +
+        (s.greedy != null ? ` · random ${s.randomAt} vs lookahead ${s.greedy} over ${s.gradientSeeds} seeds` +
+          `${s.gradientTicks < Math.min(TICKS, 900) ? ` in ${s.gradientTicks}t` : ''} (${s.gradient === Infinity ? '∞' : s.gradient.toFixed(1)}x)` : '') +
         ` · ${s.liveActions === null ? '?' : s.liveActions ?? 0}/${s.playableActions ?? 0} actions live · ${s.msPer1000Ticks ?? '?'} ms/1000t${s.turnBased ? ' · turn-based' : ''}`
       : 'did not reach the play checks';
     console.log(`  ${mark.padEnd(3)} ${r.name.padEnd(22)} ${line}`);

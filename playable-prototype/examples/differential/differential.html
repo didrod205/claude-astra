@@ -1,0 +1,552 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Differential</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body { margin:0; min-height:100%; background:#0b0e13; display:grid; place-content:center;
+              font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#c3cddb; }
+  canvas { background:#11151d; border-radius:12px; display:block; touch-action:none; max-width:100%; height:auto; }
+  #bar { display:flex; justify-content:space-between; padding:8px 4px; letter-spacing:.03em; }
+  #bar b { font-weight:600; color:#e6edf6; }
+  #hint { text-align:center; color:#5f6b7c; padding-top:8px; max-width:780px; }
+</style>
+
+<div>
+  <div id="bar"><span id="clock">23:00</span><span id="score">got out clean <b>0</b> of <b>0</b></span><span id="lives">deaths left <b>4</b></span></div>
+  <canvas id="c" width="780" height="520"></canvas>
+  <div id="hint">← → pick a patient (free) · E examine · G ECG · B bloods · C send to CT · 1–5 commit to a treatment · Space start</div>
+</div>
+
+<script>
+/* ======================================================================
+   DIFFERENTIAL.  Axis: information.
+
+   The ward is not the problem. Knowing is. Every patient has one hidden
+   condition; everything you can see is evidence about it, and nothing
+   you can see is proof. The panel on the right is an honest posterior —
+   the game does the arithmetic so the decision left to you is the one
+   worth having: commit at 71%, or spend thirty minutes getting to 94%
+   while four other people slide.
+
+   Two resources, contended differently:
+     · YOU are serial. Examining, ECG, bloods and treating all block.
+     · THE SCANNER is parallel but exclusive, and takes the patient out
+       of your reach while it runs. They deteriorate in there.
+
+   Treating the wrong thing is not a missed turn. It is harm — and it is
+   also evidence, which is the cruellest thing about it.
+   ====================================================================== */
+
+const W = 780, H = 520, DAWN = 1800, DEAD = 120;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+
+let rngState = 1;
+const rnd = () => {
+  rngState |= 0; rngState = (rngState + 0x6D2B79F5) | 0;
+  let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const ri = n => Math.floor(rnd() * n);
+const gauss = s => (rnd() + rnd() + rnd() - 1.5) * 2 * s;   // sd ≈ s
+
+const COND = ['CARDIAC', 'SEPSIS', 'BLEED', 'NEURO', 'METABOLIC'];
+const TX   = ['thrombolyse', 'sepsis six', 'transfuse', 'stroke call', 'correct glucose'];
+const N = 5;
+
+/* --- the world model ---------------------------------------------------
+   Every observation is a likelihood row over the five conditions. Sampling
+   an observation and updating the belief with it use the SAME numbers, so
+   the percentages on screen are true, not decoration. */
+
+const SIG = 17;                                   // vitals noise, and the sd the belief assumes
+// HR, BP, TEMP by condition. These are deliberately NOT five separable clusters.
+// With well-spread profiles the free evidence alone reached 78% confidence and
+// 73% correct, which made every test, the scanner and the whole clock a rounding
+// error — the dominant line was "treat on sight, always". So the vitals resolve
+// to a PAIR and no further: cardiac and bleed share a shock picture, sepsis and
+// metabolic share a febrile one, and the tests exist to break the tie. Neuro
+// stands apart, on purpose — knowing which patient does not need a work-up is
+// half the skill.
+const VIT = [[86,30,47],   // CARDIAC  ┐ shock
+             [90,34,82],   // SEPSIS   ┐ febrile
+             [88,27,43],   // BLEED    ┘ shock
+             [56,74,50],   // NEURO      distinct
+             [92,38,66]];  // METABOLIC┘ febrile
+
+const PRES = ['clutching the chest, grey and sweaty',
+              'shivering under two blankets',
+              'pale, cold hands, wants to sit up',
+              'slurring, keeps dropping the cup',
+              'drowsy, smells faintly of pear drops'];
+const PRES_L = [[.45,.10,.35,.05,.05],    // how they look tells you the group,
+                [.05,.45,.05,.05,.25],    // not the member of it
+                [.35,.10,.40,.05,.10],
+                [.05,.10,.05,.65,.20],
+                [.10,.25,.15,.20,.40]];
+
+const ECG_R = ['ECG: ST elevation, II III aVF', 'ECG: no acute change'];
+const ECG_L = [[.88,.06,.10,.05,.05],
+               [.12,.94,.90,.95,.95]];
+
+// Each test breaks a different tie, so no single order is the answer. Bloods
+// used to separate all five at once — 94% confidence for one 30-tick purchase,
+// which collapsed the game to "press B, then treat". Now bloods splits the
+// febrile pair and says almost nothing about the shock pair, because lactate
+// rises in any shock at all.
+const BLD_R = ['lactate 4.1 · WCC 22', 'glucose 2.1 · ketones 5.2', 'mildly deranged, nothing decisive'];
+const BLD_L = [[.20,.72,.28,.08,.10],
+               [.05,.08,.04,.07,.78],
+               [.75,.20,.68,.85,.12]];
+
+const CT_R  = ['CT: hyperdense MCA', 'CT: free fluid in the abdomen', 'CT: nothing acute'];
+const CT_L  = [[.03,.02,.02,.82,.03],
+               [.02,.05,.80,.03,.02],
+               [.95,.93,.18,.15,.95]];
+
+// sample an outcome from a likelihood table, given the true condition
+const sample = (L, c) => {
+  let acc = 0, r = rnd();
+  for (let i = 0; i < L.length; i++) { acc += L[i][c]; if (r < acc) return i; }
+  return L.length - 1;
+};
+const apply = (p, row) => {                       // multiply the belief by one likelihood row
+  let s = 0;
+  for (let c = 0; c < N; c++) { p.bel[c] *= row[c] + 1e-9; s += p.bel[c]; }
+  for (let c = 0; c < N; c++) p.bel[c] /= s;
+};
+const leading = p => {                                // (index, probability) of the leading diagnosis
+  let b = 0; for (let c = 1; c < N; c++) if (p.bel[c] > p.bel[b]) b = c;
+  return [b, p.bel[b]];
+};
+
+/* --- state ------------------------------------------------------------ */
+
+let G;
+const fresh = () => ({
+  status: 'menu', tick: 0, score: 0, lives: 9, busy: 0, busyMax: 1, doing: '',
+  q: [], f: 0, seq: 0, ct: null, nextIn: 0, pend: null, out: 0,
+  harm: 0, deaths: 0, flash: 0, ok: 0, log: [], logl: [],
+});
+G = fresh();
+
+const wrapAt = (s, n) => {                        // wrapped once per note, not once per frame
+  const out = []; let line = '';
+  for (const w of String(s).split(' ')) {
+    if ((line + w).length > n) { out.push(line.trimEnd()); line = ''; }
+    line += w + ' ';
+  }
+  out.push(line.trimEnd()); return out;
+};
+const say = s => {
+  G.log.unshift(s); G.logl.unshift(wrapAt(s, 30));
+  if (G.log.length > 5) { G.log.pop(); G.logl.pop(); }
+};
+
+const freeBay = () => {                           // two patients in bay 3 is not a ward
+  const used = new Set(G.q.map(x => x.bay));
+  let b = 1; while (used.has(b)) b++;
+  return b;
+};
+
+function admit() {
+  const cond = ri(N);
+  const p = {
+    id: ++G.seq, cond, bel: [.2,.2,.2,.2,.2], notes: [], nl: [], done: {}, wait: [],
+    vit: VIT[cond].map(v => Math.max(4, Math.min(98, Math.round(v + gauss(SIG))))),
+    sev: 14 + ri(18), rate: 1 + ri(3), inCT: false,
+    age: 18 + ri(72), sex: ri(2) ? 'F' : 'M', bay: freeBay(), t0: G.tick,
+  };
+  // the two things you get for nothing: how they look, and their obs on arrival
+  const pr = sample(PRES_L, cond);
+  p.pres = PRES[pr];
+  apply(p, PRES_L[pr]);
+  const vl = [];
+  for (let c = 0; c < N; c++) {
+    let d = 0; for (let i = 0; i < 3; i++) { const e = p.vit[i] - VIT[c][i]; d += e * e; }
+    vl.push(Math.exp(-d / (2 * SIG * SIG)));
+  }
+  apply(p, vl);
+  G.q.push(p);
+  say('bay ' + p.bay + ' in — ' + p.age + p.sex);
+}
+
+const note = (p, s) => { p.notes.unshift(s); p.nl.unshift(wrapAt(s, 34));
+                         if (p.notes.length > 4) { p.notes.pop(); p.nl.pop(); } };
+
+const cur = () => G.q[G.f];
+// The arithmetic that decides whether this game is about information at all.
+// A test only saves you treatments — from about 1.8 guesses per discharge down
+// to 1.3 — so if a test costs you more than half a treatment it can never pay,
+// and every version where tests blocked the doctor for their full duration was
+// won by "order nothing, just try things". Which is not a game about knowing.
+//
+// So: ordering a test costs you a moment. The RESULT takes real time and comes
+// back while you are elsewhere. That is what an emergency department actually
+// does, and it puts the decision where it belongs — you can investigate the
+// people who are stable, and the ones who are crashing you have to call on the
+// spot, because they will not survive the wait.
+const T    = { examine: 10, ecg: 6, bloods: 5, ct: 6, treat: 40 };   // your time
+const WAIT = { examine: 0, ecg: 25, bloods: 60, ct: 70 };            // the waiting
+
+function act(a) {
+  if (a === 'next') { if (G.q.length) G.f = (G.f + 1) % G.q.length; return; }
+  if (a === 'prev') { if (G.q.length) G.f = (G.f + G.q.length - 1) % G.q.length; return; }
+  const p = cur();
+  if (!p || p.inCT) return;
+  // You are one person. Pressing something mid-task used to do nothing at all,
+  // silently — a broken button to a human, and half the inputs of a bot whose
+  // action cadence is shorter than a treatment. Queue the intent instead.
+  if (G.busy > 0) { G.pend = { a, p }; return; }
+  perform(a, p);
+}
+
+function resolve(a, p) {
+  const [R, L] = a === 'examine' ? [PRES, PRES_L] : a === 'ecg' ? [ECG_R, ECG_L]
+               : a === 'bloods'  ? [BLD_R, BLD_L] : [CT_R, CT_L];
+  const o = sample(L, p.cond);
+  apply(p, L[o]);
+  note(p, a === 'examine' ? 'on closer look: ' + R[o] : R[o]);
+}
+
+function perform(a, p) {
+  if (a in WAIT) {
+    if (p.done[a]) { G.busy = G.busyMax = 4; G.doing = 'already ordered'; return; }
+    if (a === 'ct') {
+      if (G.ct) { say('scanner busy — bay ' + G.ct.p.bay); G.busy = G.busyMax = 4; G.doing = 'scanner busy'; return; }
+      p.inCT = true; G.ct = { p, t: WAIT.ct };
+      say('bay ' + p.bay + ' round to CT');
+    }
+    p.done[a] = 1;
+    G.busy = G.busyMax = T[a]; G.doing = (a === 'examine' ? 'examining' : 'ordering ' + a) + ' · bay ' + p.bay;
+    if (WAIT[a] === 0) resolve(a, p);
+    else if (a !== 'ct') p.wait.push({ a, t: WAIT[a] });
+    return;
+  }
+
+  const n = COND.indexOf(a.slice(3).toUpperCase());
+  if (n < 0) return;
+  G.busy = G.busyMax = T.treat; G.doing = TX[n] + ' · bay ' + p.bay;
+
+  // A correct treatment works 4 times in 5. That fifth is not decoration: it is
+  // what makes the panel on the right honest. A wrong treatment NEVER settles
+  // the patient, so if the right one always did, "no response" would be proof
+  // and the belief should collapse to zero — but a belief that collapses on a
+  // failed guess makes guessing a better test than any test, and the game stops
+  // being about information. The earlier build fudged it: it updated by x0.3
+  // when the truth was 0, and the calibration curve caught it — the panel said
+  // 55% where the real figure was 40%. So the game was made to match the
+  // number rather than the number fudged to suit the game. Now P(no response |
+  // you treated the right thing) really is 0.2, and x0.2 is really the update.
+  const settled = n === p.cond && rnd() < 0.8;
+  if (settled) {
+    // The score is the people you got out without a failed attempt on the way.
+    // Counting discharges made every policy score alike: guessing and working
+    // up both clear about 25 a night, because a failure does not remove the
+    // patient, it just costs them. What separated the policies was how often
+    // they put someone through a treatment that did nothing — 17 a night
+    // against 5 — and the number on the wall was not looking at it.
+    G.out++; if (!p.harmed) G.score++;
+    G.ok = 22;
+    say('bay ' + p.bay + ': ' + COND[n] + (p.harmed ? ' — up to the ward, eventually' : ' — settled, up to the ward'));
+    const i = G.q.indexOf(p); if (i >= 0) G.q.splice(i, 1);
+    if (G.f >= G.q.length) G.f = Math.max(0, G.q.length - 1);
+  } else {
+    // Indistinguishable from the outside, and it has to be: an hour of the night
+    // gone, the patient no better, and no way to know whether you were wrong or
+    // merely early.
+    p.sev += 26; p.rate++; p.harmed = true; G.harm++; G.flash = 22;
+    apply(p, [0,1,2,3,4].map(c => c === n ? .2 : 1));
+    note(p, TX[n] + ' — no response');
+    say('bay ' + p.bay + ': ' + TX[n] + ' — no response.');
+  }
+}
+
+function update() {
+  if (G.status !== 'playing') return;
+  G.tick++;
+  if (G.busy > 0) G.busy--;
+  if (G.busy === 0 && G.pend) {                   // the thing you said you would do next
+    const { a, p } = G.pend; G.pend = null;
+    if (G.q.includes(p) && !p.inCT) perform(a, p);
+  }
+  if (G.flash > 0) G.flash--;
+  if (G.ok > 0) G.ok--;
+
+  if (G.ct && --G.ct.t <= 0) {                    // scan back, patient returns to you
+    const p = G.ct.p; G.ct = null; p.inCT = false;
+    if (G.q.includes(p)) { resolve('ct', p); say('bay ' + p.bay + ' back from CT'); }
+  }
+  for (const p of G.q)                            // results, arriving in their own time
+    for (let i = p.wait.length - 1; i >= 0; i--)
+      if (--p.wait[i].t <= 0) { resolve(p.wait[i].a, p); say('bay ' + p.bay + ' — ' + p.wait[i].a + ' back'); p.wait.splice(i, 1); }
+
+  // Moving a sick patient is not free. Without this the scanner cost nothing at
+  // all — it runs in parallel, so the answer was always "CT everyone".
+  if (G.tick % 5 === 0) for (const p of G.q) p.sev += p.rate + (p.inCT ? 1 : 0);
+  for (let i = G.q.length - 1; i >= 0; i--) {
+    const p = G.q[i];
+    if (p.sev >= DEAD) {
+      say('bay ' + p.bay + ' arrested. called it at ' + clockText(G.tick));
+      if (G.ct && G.ct.p === p) G.ct = null;
+      if (G.pend && G.pend.p === p) G.pend = null;
+      G.q.splice(i, 1); if (G.f >= G.q.length) G.f = Math.max(0, G.q.length - 1);
+      G.lives--; G.deaths++; G.flash = 30;
+    }
+  }
+
+  // The night gets busier, not easier — and it has to outrun you. A doctor who
+  // works up and treats takes about 52 ticks a patient, so roughly 34 fit in a
+  // shift; at the old arrival rate 27 turned up and a plain "sickest first, test
+  // twice, commit" policy reached dawn on 12 nights out of 12 without losing
+  // anyone. Nothing was being decided. Supply now exceeds capacity, so some of
+  // these people are not going to get the full work-up and you have to choose
+  // which.
+  if (--G.nextIn <= 0) {
+    G.nextIn = Math.max(38, 88 - Math.floor(G.tick / 240) * 9);
+    if (G.q.length < 8) admit();
+  }
+
+  if (G.lives <= 0) { G.lives = 0; G.status = 'over'; }
+  else if (G.tick >= DAWN) G.status = 'over';
+}
+
+/* --- drawing ----------------------------------------------------------- */
+
+const dom = {}, elc = {};
+const setTxt = (id, v) => { if (dom[id] === v) return; dom[id] = v;
+  (elc[id] || (elc[id] = document.getElementById(id))).textContent = v; };
+
+function clockText(t) {
+  const m = 23 * 60 + Math.floor((t / DAWN) * 8 * 60);
+  return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+const VLAB = ['HR', 'BP', 'TEMP'];
+const sevCol = s => s > 88 ? '#e05a4a' : s > 62 ? '#e0a13c' : '#5fb4e0';
+
+function draw() {
+  ctx.fillStyle = '#11151d'; ctx.fillRect(0, 0, W, H);
+  if (G.flash > 0) { ctx.fillStyle = 'rgba(224,90,74,' + (G.flash / 300) + ')'; ctx.fillRect(0, 0, W, H); }
+  ctx.textAlign = 'left';
+
+  // --- waiting strip + scanner
+  ctx.fillStyle = '#5f6b7c'; ctx.font = '10px ui-monospace,monospace';
+  ctx.fillText('WAITING', 24, 30);
+  for (let i = 0; i < 8; i++) {
+    const p = G.q[i], x = 84 + i * 66;
+    ctx.fillStyle = p && i === G.f ? '#2b3a51' : p ? '#181f2b' : '#141a23';
+    ctx.fillRect(x, 16, 60, 22);
+    if (p && i === G.f) { ctx.strokeStyle = '#5fb4e0'; ctx.lineWidth = 1; ctx.strokeRect(x + .5, 16.5, 59, 21); }
+    if (p) {
+      ctx.fillStyle = sevCol(p.sev);
+      ctx.fillText((p.inCT ? '◍' : '') + 'bay ' + p.bay, x + 6, 26);
+      ctx.fillStyle = '#4d5768'; ctx.fillText(p.sev + '/120', x + 6, 35);
+    }
+  }
+  ctx.fillStyle = G.ct ? '#e0a13c' : '#2f3947';
+  ctx.fillText(G.ct ? 'SCANNER bay ' + G.ct.p.bay + '  ' + Math.ceil(G.ct.t / 4) + 'm' : 'SCANNER free', 630, 30);
+
+  const p = cur();
+
+  // --- patient
+  ctx.fillStyle = '#161d28'; ctx.beginPath(); ctx.roundRect(24, 52, 420, 300, 10); ctx.fill();
+  if (p) {
+    ctx.fillStyle = '#e6edf6'; ctx.font = '600 19px ui-sans-serif,system-ui,sans-serif';
+    ctx.fillText('BAY ' + p.bay + '  ·  ' + p.age + p.sex, 44, 82);
+    if (p.inCT) { ctx.fillStyle = '#e0a13c'; ctx.font = '11px ui-monospace,monospace';
+                  ctx.fillText('IN THE SCANNER — out of reach', 250, 82); }
+    ctx.fillStyle = '#8d9cb0'; ctx.font = '12px ui-monospace,monospace';
+    ctx.fillText(p.pres, 44, 102);
+
+    ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(44, 116, 380, 9);
+    ctx.fillStyle = sevCol(p.sev); ctx.fillRect(44, 116, 380 * Math.min(1, p.sev / DEAD), 9);
+    ctx.fillStyle = '#5f6b7c'; ctx.font = '10px ui-monospace,monospace';
+    ctx.fillText('deterioration ' + p.sev + '/' + DEAD + '   ·   waiting ' + Math.floor((G.tick - p.t0) / 4) + 'm', 44, 139);
+
+    ctx.fillText('OBS ON ARRIVAL', 44, 162);
+    for (let v = 0; v < 3; v++) {
+      const y = 172 + v * 22;
+      ctx.fillStyle = '#7f93aa'; ctx.font = '10px ui-monospace,monospace';
+      ctx.fillText(VLAB[v], 44, y + 9);
+      ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(90, y, 300, 10);
+      ctx.fillStyle = '#4f7fa8'; ctx.fillRect(90, y, 300 * (p.vit[v] / 100), 10);
+      ctx.fillStyle = '#5f6b7c'; ctx.fillText(String(p.vit[v]), 398, y + 9);
+    }
+    ctx.fillStyle = '#5f6b7c'; ctx.fillText('FINDINGS', 44, 258);
+    let ny = 276;
+    if (!p.notes.length && !p.wait.length && !p.inCT) {
+      ctx.fillStyle = '#333d4c'; ctx.fillText('nothing ordered yet', 44, ny); ny += 16;
+    }
+    for (const w of p.wait) {                     // out of your hands, on its way back
+      ctx.fillStyle = '#7a6a3c'; ctx.fillText('· ' + w.a + ' — back in ' + Math.ceil(w.t / 4) + 'm', 44, ny); ny += 13;
+    }
+    if (p.inCT && G.ct) { ctx.fillStyle = '#7a6a3c';
+      ctx.fillText('· in the scanner — ' + Math.ceil(G.ct.t / 4) + 'm', 44, ny); ny += 13; }
+    if (ny > 276) ny += 4;
+    for (let i = 0; i < p.nl.length && ny < 344; i++) {
+      ctx.fillStyle = i === 0 ? '#adbacb' : '#4d5768';
+      for (const l of p.nl[i]) { if (ny > 344) break; ctx.fillText('· ' + l, 44, ny); ny += 13; }
+      ny += 3;
+    }
+  } else {
+    ctx.fillStyle = '#3c4759'; ctx.font = '15px ui-monospace,monospace'; ctx.textAlign = 'center';
+    ctx.fillText('waiting room empty — for now', 234, 200); ctx.textAlign = 'left';
+  }
+
+  // --- the posterior. this is the whole game.
+  ctx.fillStyle = '#131922'; ctx.beginPath(); ctx.roundRect(456, 52, 300, 300, 10); ctx.fill();
+  ctx.fillStyle = '#5f6b7c'; ctx.font = '10px ui-monospace,monospace';
+  ctx.fillText('DIFFERENTIAL', 474, 76);
+  if (p) {
+    const order = [0,1,2,3,4].sort((a, b) => p.bel[b] - p.bel[a]);
+    for (let k = 0; k < N; k++) {
+      const c = order[k], y = 96 + k * 40, pc = p.bel[c];
+      ctx.fillStyle = k === 0 ? '#e6edf6' : '#7f93aa'; ctx.font = '11px ui-monospace,monospace';
+      ctx.fillText(COND[c], 474, y + 10);
+      ctx.fillStyle = k === 0 ? '#c3cddb' : '#4d5768'; ctx.textAlign = 'right';
+      ctx.fillText((pc * 100).toFixed(pc < .1 ? 1 : 0) + '%', 738, y + 10);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(474, y + 16, 264, 8);
+      ctx.fillStyle = k === 0 ? (pc > .8 ? '#5fb4e0' : pc > .55 ? '#e0a13c' : '#8d6fb0') : '#2b3546';
+      ctx.fillRect(474, y + 16, Math.max(1, 264 * pc), 8);
+    }
+    const [, tp] = leading(p);
+    ctx.fillStyle = '#3c4759'; ctx.font = '10px ui-monospace,monospace';
+    ctx.fillText(tp > .85 ? 'you are as sure as you are going to get'
+               : tp > .6  ? 'you would probably be right'
+               : 'you are guessing', 474, 336);
+  }
+
+  // --- what you can do
+  const acts = [['E', 'examine'], ['G', 'ecg'], ['B', 'bloods'], ['C', 'ct']];
+  for (let i = 0; i < 4; i++) {
+    const k = acts[i][1], x = 24 + i * 108;
+    const free = p && !p.inCT && G.busy === 0 && !p.done[k] && (k !== 'ct' || !G.ct);
+    ctx.fillStyle = free ? '#1a2230' : '#151b25'; ctx.fillRect(x, 372, 98, 44);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = p && p.done[k] ? '#2f3947' : free ? '#9fb0c4' : '#3a4453';
+    ctx.font = '600 11px ui-monospace,monospace';
+    ctx.fillText(acts[i][0] + ' · ' + (k === 'ct' ? 'CT' : k), x + 49, 391);
+    ctx.fillStyle = free ? '#5f6b7c' : '#333d4c'; ctx.font = '10px ui-monospace,monospace';
+    ctx.fillText(p && p.done[k] ? 'ordered'
+               : Math.ceil(T[k] / 4) + 'm' + (WAIT[k] ? ' · back in ' + Math.ceil(WAIT[k] / 4) : ''), x + 49, 406);
+  }
+  ctx.textAlign = 'left';
+  for (let i = 0; i < N; i++) {
+    const x = 460 + (i % 3) * 108, y = 372 + Math.floor(i / 3) * 0;
+    if (i < 3) {
+      ctx.fillStyle = '#1a2230'; ctx.fillRect(x, 372, 98, 44);
+      ctx.textAlign = 'center'; ctx.fillStyle = '#9fb0c4'; ctx.font = '600 11px ui-monospace,monospace';
+      ctx.fillText((i + 1) + ' · ' + COND[i], x + 49, 391);
+      ctx.fillStyle = '#4d5768'; ctx.font = '10px ui-monospace,monospace';
+      ctx.fillText(TX[i], x + 49, 406);
+      ctx.textAlign = 'left';
+    }
+  }
+  for (let i = 3; i < N; i++) {
+    const x = 460 + (i - 3) * 108;
+    ctx.fillStyle = '#1a2230'; ctx.fillRect(x, 424, 98, 44);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#9fb0c4'; ctx.font = '600 11px ui-monospace,monospace';
+    ctx.fillText((i + 1) + ' · ' + COND[i], x + 49, 443);
+    ctx.fillStyle = '#4d5768'; ctx.font = '10px ui-monospace,monospace';
+    ctx.fillText(TX[i], x + 49, 458);
+    ctx.textAlign = 'left';
+  }
+
+  // --- you
+  ctx.fillStyle = G.busy > 0 ? '#e0a13c' : '#4a8f6a'; ctx.font = '11px ui-monospace,monospace';
+  ctx.fillText(G.busy > 0 ? G.doing : 'free', 24, 444);
+  if (G.pend) { ctx.fillStyle = '#5f6b7c';
+    ctx.fillText('then: ' + G.pend.a + ' · bay ' + G.pend.p.bay, 250, 444); }
+  ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(24, 452, 410, 6);
+  if (G.busy > 0) { ctx.fillStyle = '#e0a13c'; ctx.fillRect(24, 452, 410 * (G.busy / G.busyMax), 6); }
+
+  ctx.fillStyle = '#3c4759'; ctx.font = '10px ui-monospace,monospace';
+  ctx.fillText('sent up ' + G.out + '  ·  no response ' + G.harm + '  ·  died ' + G.deaths + '  ·  waiting ' + G.q.length, 24, 492);
+
+  if (G.status !== 'playing') {
+    ctx.fillStyle = 'rgba(9,12,17,.88)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#e9eff7';
+    ctx.font = '600 32px ui-sans-serif,system-ui,sans-serif';
+    ctx.fillText(G.status === 'menu' ? 'DIFFERENTIAL'
+               : G.lives > 0 ? '07:00 — handover' : 'shift abandoned', W / 2, H / 2 - 18);
+    ctx.font = '13px ui-monospace,monospace'; ctx.fillStyle = '#93a1b3';
+    ctx.fillText(G.status === 'menu'
+      ? 'one doctor, five things it could be, and never quite enough time'
+      : `${G.score} of ${G.out} got out clean · ${G.harm} treatments did nothing · ${G.deaths} died`, W / 2, H / 2 + 12);
+    ctx.fillStyle = '#5f6b7c';
+    ctx.fillText('press Space', W / 2, H / 2 + 40);
+    ctx.textAlign = 'left';
+  }
+
+  setTxt('clock', clockText(G.tick));
+  setTxt('score', 'got out clean ' + G.score + ' of ' + G.out);
+  setTxt('lives', 'deaths left ' + G.lives);
+}
+
+/* --- the contract ------------------------------------------------------ */
+
+const ACTIONS = ['next', 'prev', 'examine', 'ecg', 'bloods', 'ct',
+                 ...COND.map(c => 'tx_' + c.toLowerCase()), 'start'];
+const api = {
+  actions: ACTIONS,
+  state: () => {
+    const p = cur(); const [tc, tp] = p ? leading(p) : [-1, 0];
+    return {
+      status: G.status, tick: G.tick, score: G.score, lives: G.lives,
+      queue: G.q.length, busy: G.busy, focus: G.f, focusBay: p ? p.bay : 0, out: G.out,
+      curSev: p ? p.sev : 0, notes: p ? p.notes.length : 0,
+      ordered: p ? Object.keys(p.done).length : 0, awaiting: p ? p.wait.length + (p && p.inCT ? 1 : 0) : 0,
+      lead: tc, conf: Math.round(tp * 100), inCT: p ? p.inCT : false,
+      scanner: G.ct ? G.ct.p.bay : 0, harm: G.harm, deaths: G.deaths,
+      pend: G.pend ? G.pend.a : '',
+    };
+  },
+  input(a, down = true) {
+    if (a === 'start') { if (down && G.status !== 'playing') api.start(); return; }
+    if (down && G.status === 'playing') act(a);
+  },
+  start() { const keep = rngState; G = fresh(); rngState = keep;
+            G.status = 'playing'; admit(); admit(); admit(); G.nextIn = 90; },
+  reset() { G = fresh(); },
+  seed(n) { rngState = n | 0; },
+  step(n = 1) { for (let i = 0; i < n; i++) update(); draw(); },
+};
+window.__game = api;
+
+/* --- a human ----------------------------------------------------------- */
+
+const bind = m => { const t = {}; for (const k in m) { t[k] = m[k];
+  if (/^Key[A-Z]$/.test(k)) { t[k[3].toLowerCase()] = m[k]; t[k[3]] = m[k]; }
+  if (/^Digit[0-9]$/.test(k)) t[k[5]] = m[k];
+  if (k === 'Space') t[' '] = m[k]; } return t; };
+const KEYS = bind({
+  ArrowRight: 'next', ArrowLeft: 'prev', KeyE: 'examine', KeyG: 'ecg',
+  KeyB: 'bloods', KeyC: 'ct', Space: 'start',
+  Digit1: 'tx_cardiac', Digit2: 'tx_sepsis', Digit3: 'tx_bleed',
+  Digit4: 'tx_neuro', Digit5: 'tx_metabolic',
+});
+addEventListener('keydown', e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) { e.preventDefault(); api.input(a, true); } });
+addEventListener('keyup',   e => { const a = KEYS[e.code] || KEYS[e.key]; if (a) api.input(a, false); });
+cv.addEventListener('pointerdown', e => {
+  if (G.status !== 'playing') { api.input('start', true); return; }
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX - r.left) * (W / r.width), y = (e.clientY - r.top) * (H / r.height);
+  if (y < 44) { const i = Math.floor((x - 84) / 66); if (i >= 0 && i < G.q.length) G.f = i; return; }
+  if (y > 372 && y < 416 && x < 456) { const i = Math.floor((x - 24) / 108);
+    if (i >= 0 && i < 4) api.input(['examine','ecg','bloods','ct'][i], true); return; }
+  if (y > 372 && y < 416 && x > 456) { const i = Math.floor((x - 460) / 108);
+    if (i >= 0 && i < 3) api.input(ACTIONS[6 + i], true); return; }
+  if (y > 424 && y < 468 && x > 456) { const i = Math.floor((x - 460) / 108);
+    if (i >= 0 && i < 2) api.input(ACTIONS[9 + i], true); }
+});
+
+api.seed(Date.now() & 0x7fffffff);
+let acc = 0, last = performance.now();
+(function loop(now) {
+  acc += Math.min(Math.max(now - last, 0), 100); last = now;
+  while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+  draw(); requestAnimationFrame(loop);
+})(last);
+</script>
