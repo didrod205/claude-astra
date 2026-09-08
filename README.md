@@ -59,7 +59,7 @@ whether bullets end in a full stop, how long a heading runs.
 
 ## Verified
 
-`./verify.sh` reproduces every claim below. 27 checks, no arguments, no setup —
+`./verify.sh` reproduces every claim below. 30 checks, no arguments, no setup —
 it builds its own fixtures in a temp directory and cleans up after itself.
 
 ```
@@ -85,6 +85,7 @@ frontend-qa
   ok    sweep flags a page with no viewport meta
   ok    sweep computes colour contrast and flags text below AA
   ok    sweep flags a control with no focus style, and not one that has one
+  ok    sweep says outright that a canvas app is beyond what it can check
 house-style (style.py runs on the standard library alone)
   ok    pdf: the reference matches its own spec
   ok    pdf: a drifted file is caught on face, colour and size
@@ -94,6 +95,8 @@ house-style (style.py runs on the standard library alone)
   ok    pptx: off-house face, 16:9 geometry and off-ladder size are caught
   ok    prose: the house deck matches its own voice
   ok    prose: an off-voice deck is caught on density, sentences, punctuation, person and titles
+  ok    a slide on a layout outside the house vocabulary is caught
+  ok    one off-style slide among four conforming ones is caught, not hidden by the median
 ```
 
 Every check is run **both ways** — a good input must pass and a deliberately
@@ -124,6 +127,28 @@ It is instead **driven by hand**, and every claim it makes has been checked
 against a real app. Four are written up as measured profiles — Calculator,
 TextEdit, Activity Monitor and Preview — in
 [`references/app-profiles.md`](desktop-app-driver/references/app-profiles.md).
+
+### Handing each skill to a session that had nothing else
+
+The surest way to find out whether a skill carries on its own is to give it, and
+a one-line brief, to a session with none of the context that built it — and to
+ask that session to be blunt about what was wrong. Three were tested this way
+(`desktop-app-driver` cannot be: it drives the user's own machine through a
+permission dialog).
+
+Each of them produced good work, and each returned a list of faults in the
+tooling that the author could not see. `walkable-3d` gave up seven, including a
+documented invocation that wrote into the installed skill and a distance-framing
+failure that returned a blank white image indistinguishable from a broken scene.
+`house-style` was handed a clean first pass, did not believe it, and built canary
+files to test the checker — proving that the layout comparison its own reference
+calls "worth more than any colour value" did not exist, and that every prose
+check was a median that one bad slide could hide behind. `frontend-qa` found that
+its own documentation manufactured false bugs: synthetic key events do not reach
+the page at all until something clicks it first, so a tester following the skill
+literally files "Space doesn't start the game" against working code.
+
+All of it is fixed, and most of it is now a check in the list above.
 
 ## What running them found
 
@@ -434,7 +459,7 @@ exposed — typing into its search field filtered a table the tree never describ
 ## Try it without asking Claude
 
 ```bash
-./verify.sh                                                   # all 27 checks, ~7 min
+./verify.sh                                                   # all 30 checks, ~9 min
 node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
 open playable-prototype/assets/template/game.html
 ```

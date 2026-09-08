@@ -14,7 +14,8 @@ look at when two samples disagree.
 | `palette` | every colour seen as `RRGGBB`, commonest first |
 | `sizes_pt` | the point-size ladder, ascending |
 | `geometry` | `page_in` / `slide_in` / `margins_in` / `text_inset_in`, in inches |
-| `layouts` | slide layout names across all pptx samples |
+| `layouts` | slide layout names available across all pptx samples — the vocabulary |
+| `layouts_used` (per sample) | the layout each **slide actually sits on**. This is what `check` compares against |
 | `named_styles` | style ids across all docx samples |
 | `prose` | the measured writing habits, keyed by unit (`slide` / `page`) — see below |
 | `samples` | the per-file readings |
@@ -29,7 +30,8 @@ the PDF's text layer; headings are the first paragraph of a slide, or a
 | field | is |
 |---|---|
 | `words_per_unit` | density — the number people ignore |
-| `sentence_words_median`, `..._p90` | measured *within* a block, so a deck of unpunctuated fragments does not read as one enormous sentence |
+| `sentence_words_median`, `..._p90`, `..._max` | measured *within* a block, so a deck of unpunctuated fragments does not read as one enormous sentence. The **max** matters as much as the median: one runaway paragraph among a dozen fragments moves neither the median nor the p90, and is the first thing a reader notices |
+| `heading_words_median`, `..._max` | same reason — four one-word titles hide a fourteen-word one |
 | `bullets_per_unit` | |
 | `block_ends_with_period` | 0 = fragments, 1 = sentences. The convention, as a fraction |
 | `heading_words_median` | 1–2 is a label, 8+ is an assertion |
@@ -38,6 +40,10 @@ the PDF's text layer; headings are the first paragraph of a slide, or a
 
 Trust these at the medium level: they are real counts of real text, but a
 two-sample corpus gives a shaky median. Three samples is where they settle.
+
+**Samples with no writing in them are excluded from the prose merge.** A stock
+template contributes theme, ladder and geometry; averaging its zeros in would
+print "0 words per slide" as though it were a measured finding about the client.
 
 ## Where each thing comes from
 

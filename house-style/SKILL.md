@@ -113,6 +113,7 @@ Exit 0 clean · 1 warnings · 2 off-style. It flags:
 |---|---|---|
 | `font` | error | a typeface outside the house set |
 | `geometry` | error | page or slide size that doesn't match |
+| `layout` | error | a slide built on a layout that is not in the house vocabulary |
 | `color` | warn | a colour outside the palette (black and white exempt) |
 | `size` | warn | a point size off the ladder |
 | `styles` | warn | house named styles missing from the file |
@@ -120,7 +121,8 @@ Exit 0 clean · 1 warnings · 2 off-style. It flags:
 | `sentences` | warn | median sentence far longer than the house |
 | `punctuation` | warn | fragments where the house writes sentences, or the reverse |
 | `voice` | warn | first or second person, or exclamation marks, the samples do not use |
-| `titles` | warn | headings that assert where the house labels |
+| `titles` | warn | headings that assert where the house labels — including **one** outlier among conforming siblings |
+| `sentences` | warn | also fires on a single runaway block a median would hide |
 
 Warnings are often legitimate — a new accent for a callout, a size the samples
 happened not to contain. Errors rarely are. Judge them; do not suppress them

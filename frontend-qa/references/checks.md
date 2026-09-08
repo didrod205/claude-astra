@@ -29,6 +29,7 @@ warnings mean look.
 | `link` | `href` missing, empty, or `#` | either a real dead link or a button wearing an anchor |
 | `touch` | tap target under 44×44 CSS px | **mobile widths only** (< 500px) |
 | `meta` | no `<title>` | |
+| `canvas` | a `<canvas>` that is the largest thing on the page and has no accessible name, role or `tabindex` | the application is invisible to assistive technology and to the keyboard — **and every other check on this page is close to meaningless**, because they are shaped around DOM widgets. A canvas game with no DOM controls also produces zero `link` and zero `touch` findings, which reads as "nothing wrong" and means "there is nothing to press" |
 | `a11y` focus | a control whose computed style does not change when focused | `outline: none` with nothing put back. Needs `Emulation.setFocusEmulationEnabled`, which the runner turns on — without it a headless page is never window-focused, `:focus` never matches, and every focus style silently reads as absent |
 
 ## Read the findings in this order
@@ -50,6 +51,10 @@ The sweep is a static snapshot of the loaded page. It does not know about:
 - **Anything behind an interaction.** Menus, modals, tabs, accordions, and every
   route you have to click to reach are invisible to it. That is what the flow
   half is for.
+- **A canvas application, almost entirely.** A sweep of a canvas game came back
+  with one error and one warning for a page that is unplayable on the width it
+  had just measured. The `canvas` finding exists to say so out loud: **a clean
+  sweep on a canvas app means almost nothing.** Drive it.
 - **Visual hierarchy, overlap, z-index.** Read the screenshots.
 - **Contrast over an image or a gradient.** Reported as a count of unverifiable
   elements. Judge those by eye — the tool declines rather than guessing.

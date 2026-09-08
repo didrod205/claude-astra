@@ -36,6 +36,23 @@ you know the page; use single calls while you are still learning it.
 and a layout shift; `(412, 380)` does not. Fall back to coordinates only for
 canvas and custom-drawn widgets.
 
+**On a canvas app there are no refs at all.** `read_page` returns the DOM around
+the canvas and nothing of the application; the game or editor is not in the
+accessibility tree. Two mechanics of coordinate clicking that are easy to lose
+half an hour to:
+
+- `left_click` by coordinate **refuses to run without a prior
+  `computer{action:"screenshot"}`** — "no screenshot dimensions cached".
+- The screenshot's coordinate frame is **not the CSS viewport**: 800×500 for a
+  1440×900 viewport, 750×1624 for 375×812. Every coordinate off
+  `getBoundingClientRect` needs rescaling.
+
+**`left_click` can stop working after `resize_window`.** A click that worked at
+the desktop viewport timed out after 30 s with "the Browser pane is currently
+hidden" once the same page was reloaded at `preset: "mobile"`. Dispatching a
+`PointerEvent` from JS still works, but it is a weaker assertion — say so in the
+report rather than pretending you clicked.
+
 ## Two things that will make your report wrong
 
 Both were found by actually driving a page, and neither is visible from the docs.
@@ -63,24 +80,34 @@ What to do:
 - **Assert on state that changes synchronously with the event**, not on whatever
   the render loop paints. A well-built page updates its model on the click; only
   the painting waits for the frame.
-- **Drive the loop yourself** when the app exposes a way — `__game.step(300)` on
-  a prototype from `playable-prototype`, or whatever tick function the app has.
-  After 300 explicit ticks the same page's DOM read `landed 1` correctly.
+- **Drive the loop yourself** when the app exposes a way. This is not a
+  workaround — for a canvas app it is the primary way to test, and you should
+  look for it *first*: `window.__game` (anything from `playable-prototype` has
+  it), a tick or update function, a store you can step. `__game.step(300)` made
+  a frozen page's DOM read `landed 1` correctly, and made a 20 000-tick soak
+  possible in seconds.
 - **Say so in the report.** "Not checked: anything that only updates on a frame
   loop" is an honest line; a false bug is not.
 
-### Synthetic key events arrive without `e.code`
+### Click the page once before you test any keyboard input
 
-The `computer` tool's `key` action dispatches events that are **missing
-`e.code`** — `ArrowRight` came through with `e.key` only, and `space` arrived
-with `key` *and* `code` both empty strings. Any handler written as
-`KEYS[e.code]` — the common form — silently never fires, and the tool still
-reports `pressed space x1`.
+**Before a real click lands in the page, `computer{action:"key"}` events do not
+reach it at all.** The tool reports `pressed space x1`; a capture-phase listener
+on `window` records nothing, with `document.hasFocus()` true and `activeElement`
+on `BODY`. One real `left_click` on the page and the identical calls start
+arriving.
 
-So: keyboard input through this tool is lossy. Prefer pointer interaction, or
-the app's own API, for anything load-bearing. If a key genuinely does nothing,
-check whether the handler reads `e.code` before filing it as a bug — and if you
-are also the author, bind on `e.code || e.key`.
+This manufactures false bugs. Press Space, observe nothing, file "Space doesn't
+start the game" — against working code. Click first, every time.
+
+Once events do land, they are still lossy: they arrive **without `e.code`**.
+`ArrowRight` comes through on `e.key` alone, and **`space` arrives with `key`
+and `code` both empty, so it cannot be sent through this tool at all.** Any
+handler written as `KEYS[e.code]` — the common form — silently never fires.
+
+So: prefer pointer interaction or the app's own API for anything load-bearing.
+If a key genuinely does nothing, check whether the handler reads `e.code`, and
+whether you have clicked the page, before filing it as a bug.
 
 ## What "assert" means here
 

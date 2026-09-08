@@ -23,7 +23,7 @@
     (el.textContent || '').trim() ||
     (el.value || '').trim();
 
-  const out = { overflow: [], clipped: [], images: [], controls: [], labels: [], headings: [], targets: [], dupIds: [], deadLinks: [], contrast: [], contrastSkipped: 0, focus: [] };
+  const out = { overflow: [], clipped: [], images: [], controls: [], labels: [], headings: [], targets: [], dupIds: [], deadLinks: [], contrast: [], contrastSkipped: 0, focus: [], canvasApps: [] };
 
   // 1. Horizontal overflow — the body must never scroll sideways.
   const vw = document.documentElement.clientWidth;
@@ -174,6 +174,38 @@
     if (out.focus.length > 8) break;
   }
   try { active && active.focus && active.focus({ preventScroll: true }); } catch {}
+
+  // 8d. A <canvas> that IS the application. The control-name and alt-text checks
+  // are shaped around DOM widgets and see nothing here; a game or editor drawn
+  // into a canvas is invisible to assistive technology and to the keyboard, and
+  // a sweep that reports "1 warning" on such a page is close to meaningless.
+  for (const c of document.querySelectorAll('canvas')) {
+    if (!vis(c)) continue;
+    const r = c.getBoundingClientRect();
+    // Scale-independent: a canvas that carries the page is the biggest thing on
+    // it. A viewport-proportional threshold made the same page pass at 1440 and
+    // fail at 390, which is worse than not checking.
+    const vh = window.innerHeight || 800;
+    const area = r.width * r.height;
+    let biggest = 0;
+    for (const el of document.querySelectorAll('body *')) {
+      if (!vis(el) || el === c || el.contains(c)) continue;
+      const b2 = el.getBoundingClientRect();
+      biggest = Math.max(biggest, b2.width * b2.height);
+    }
+    const big = area >= biggest * 0.9 && area > 0.06 * vw * vh;
+    if (!big) continue;
+    const named = c.getAttribute('aria-label') || c.getAttribute('title') ||
+                  c.getAttribute('aria-labelledby') || (c.textContent || '').trim();
+    const reachable = c.hasAttribute('tabindex') || c.getAttribute('role');
+    if (!named || !reachable) {
+      out.canvasApps.push({
+        el: where(c), w: Math.round(r.width), h: Math.round(r.height),
+        named: !!named, reachable: !!reachable,
+        controls: document.querySelectorAll('button,[role="button"],a[href],input,select,textarea').length,
+      });
+    }
+  }
 
   // 9. The viewport meta. Without width=device-width a phone lays the page out
   // at ~980px and scales it down, so the site is unreadable AND every width-based

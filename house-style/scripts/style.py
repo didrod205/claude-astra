@@ -143,6 +143,30 @@ def read_docx(z):
     return d
 
 
+def slide_layout_names(z):
+    """Which layout each slide actually sits on, by name. The list of layouts in
+    the file is the available vocabulary; this is the vocabulary in use."""
+    names = {}
+    for n in z.namelist():
+        m = re.fullmatch(r'ppt/slideLayouts/(slideLayout\d+)\.xml', n)
+        if not m:
+            continue
+        root = _xml(z, n)
+        cs = root.find('.//p:cSld', NS) if root is not None else None
+        if cs is not None and cs.get('name'):
+            names[m.group(1)] = cs.get('name')
+    used = []
+    for n in sorted(x for x in z.namelist() if re.fullmatch(r'ppt/slides/slide\d+\.xml', x)):
+        rel = f'ppt/slides/_rels/{os.path.basename(n)}.rels'
+        try:
+            blob = z.read(rel).decode('utf-8', 'ignore')
+        except KeyError:
+            continue
+        m = re.search(r'Target="[^"]*?(slideLayout\d+)\.xml"', blob)
+        used.append(names.get(m.group(1)) if m else None)
+    return used
+
+
 def read_pptx(z):
     d = {'kind': 'pptx'}
     d['theme'] = theme_of(z)
@@ -165,6 +189,7 @@ def read_pptx(z):
     d['layouts'] = layouts
     d['slide_count'] = sum(1 for x in z.namelist()
                            if re.fullmatch(r'ppt/slides/slide\d+\.xml', x))
+    d['layouts_used'] = [x for x in slide_layout_names(z) if x]
     d['prose'] = prose_pptx(z)
     f, c, sz = scan_used(z, [r'ppt/slides/slide\d+\.xml',
                              r'ppt/slideMasters/slideMaster\d+\.xml',
@@ -289,18 +314,32 @@ def prose_pptx(z):
     body, heads, bullets, per = [], [], 0, []
     for n in slides:
         blob = z.read(n).decode('utf-8', 'ignore')
-        paras = [p for p in _paras_ooxml(blob, 'a:p', 'a:t') if p['text']]
-        if not paras:
+        # The title is the shape carrying a title placeholder, not whichever
+        # paragraph happens to be serialised first — PowerPoint reorders shapes,
+        # and taking paras[0] measures a bullet as the heading when it does.
+        title, rest = None, []
+        for shape in re.split(r'<p:sp[ >]', blob)[1:]:
+            shape = shape.split('</p:sp>')[0]
+            texts = [p['text'] for p in _paras_ooxml(shape, 'a:p', 'a:t') if p['text']]
+            if not texts:
+                continue
+            if re.search(r'<p:ph[^>]*type="(ctrTitle|title)"', shape) and title is None:
+                title = texts[0]
+                rest += texts[1:]
+            else:
+                rest += texts
+        if title is None and rest:
+            title = rest.pop(0)
+        if title is None and not rest:
             per.append(0); continue
-        heads.append(paras[0]['text'])
-        rest = [p['text'] for p in paras[1:]]
+        if title:
+            heads.append(title)
         body += rest
         bullets += len(rest)
-        per.append(sum(_words(t) for t in rest) + _words(paras[0]['text']))
+        per.append(sum(_words(t) for t in rest) + _words(title or ''))
     if not slides:
         return None
-    d = _prose(body, heads, bullets, unit='slide', units=len(slides))
-    d['words_per_unit'] = round(sum(per) / max(1, len(per)), 1)
+    d = _prose(body, heads, bullets, unit='slide', units=len(slides), heading_words=True)
     d['bullets_per_unit'] = round(bullets / max(1, len(slides)), 1)
     return d
 
@@ -319,8 +358,10 @@ def prose_pdf(path):
 _TERMINAL = ('.', '!', '?', '\u3002', '\uff01', '\uff1f')
 
 
-def _prose(body, heads, bullets, unit, units):
-    text = ' '.join(body)
+def _prose(body, heads, bullets, unit, units, heading_words=False):
+    # `words_total` and `words_per_unit` count the same words. A deck's density
+    # includes its slide titles; a report's does not count its headings twice.
+    text = ' '.join(body + (heads if heading_words else []))
     words = _words(text)
     # Split sentences WITHIN each block. Joining first merges a whole deck of
     # unpunctuated fragments into one 31-word "sentence" that exists nowhere.
@@ -339,10 +380,12 @@ def _prose(body, heads, bullets, unit, units):
         'blocks': len(body),
         'sentence_words_median': slen[len(slen) // 2],
         'sentence_words_p90': slen[int(len(slen) * 0.9) - 1] if slen else 0,
+        'sentence_words_max': slen[-1],
         'bullets': bullets,
         'bullets_per_unit': round(bullets / max(1, units), 1),
         'block_ends_with_period': round(period, 2),
         'heading_words_median': hl[len(hl) // 2],
+        'heading_words_max': hl[-1],
         'first_person_per_1k': round(len(_FIRST.findall(text)) * 1000 / max(1, words), 1),
         'second_person_per_1k': round(len(_SECOND.findall(text)) * 1000 / max(1, words), 1),
         'hedges_per_1k': round(len(_HEDGE.findall(text)) * 1000 / max(1, words), 1),
@@ -406,7 +449,10 @@ def build_spec(samples):
     prose = {}
     for d in docs:
         pr = d.get('prose')
-        if not pr:
+        # A stock template contributes theme, ladder and geometry but no writing.
+        # Averaging its zeros in prints "0 words/slide" as though it were a
+        # finding about the client's house style.
+        if not pr or not pr.get('words_total'):
             continue
         b = prose.setdefault(pr['unit'], {'n': 0})
         b['n'] += 1
@@ -510,6 +556,34 @@ def check(produced, spec):
             if 0 < wanthw <= 4 and hw >= wanthw * 2.5:
                 problems.append(('warn', base, 'titles',
                     f"headings run {hw:.0f} words against the house {wanthw:.0f} — the samples label, these assert"))
+
+        # Layouts: spec.md calls them the deck's real vocabulary and worth more
+        # than any colour value, and until now check() never looked at them.
+        house_layouts = set(spec.get('layouts') or [])
+        used = d.get('layouts_used') or []
+        if house_layouts and used:
+            off = sorted({u for u in used if u not in house_layouts})
+            if off:
+                problems.append(('error', base, 'layout',
+                    f"slides built on layouts that are not in the house set: {', '.join(off[:5])}. "
+                    'Building from the deck\'s own layouts is what makes it look native'))
+
+        # A median over a whole file hides one bad slide behind its conforming
+        # siblings, which is exactly the slide a person notices first.
+        if pr and want:
+            hm, wanthm = pr.get('heading_words_max', 0), want.get('heading_words_median', 0)
+            if 0 < wanthm <= 4 and hm >= max(wanthm * 3, 8):
+                problems.append(('warn', base, 'titles',
+                    f"one heading runs {hm:.0f} words against a house median of {wanthm:.0f} — "
+                    'the file average hides it'))
+            # A p90 cannot see one outlier among a dozen conforming blocks
+            # either; the maximum can, and one runaway paragraph is exactly what
+            # a reader notices first.
+            sm, wantsm = pr.get('sentence_words_max', 0), want.get('sentence_words_median', 0)
+            if wantsm >= 2 and sm > max(wantsm * 4, wantsm + 15):
+                problems.append(('warn', base, 'sentences',
+                    f"the longest block runs {sm:.0f} words against a house median of {wantsm:.0f} — "
+                    'the file average hides it'))
 
         if spec.get('named_styles') and d.get('styles') is not None:
             missing = [s for s in ('Heading1', 'Heading2', 'Title')

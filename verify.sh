@@ -221,12 +221,20 @@ cat > "$TMP/a11y/index.html" <<'HTML'
 <h1 class=ok>Heading</h1><p class=faint>Too light to read.</p><p class=ok>Fine.</p>
 <button class=bare>No focus ring</button><button class=good>Has a focus ring</button>
 HTML
-node frontend-qa/scripts/qa-run.mjs "$TMP/a11y" --out "$TMP/qa4" --widths 1440 >"$TMP/out" 2>&1
-grep -q 'contrast.*p.faint' "$TMP/out" && ok "sweep computes colour contrast and flags text below AA" \
-  || { bad "contrast check did not fire"; sed 's/^/        /' "$TMP/out" | tail -6; }
-grep -q 'button.bare' "$TMP/out" && ! grep -q 'button.good' "$TMP/out" \
+node frontend-qa/scripts/qa-run.mjs "$TMP/a11y" --out "$TMP/qa4" --widths 1440 >"$TMP/out2" 2>&1
+grep -q 'contrast.*p.faint' "$TMP/out2" && ok "sweep computes colour contrast and flags text below AA" \
+  || { bad "contrast check did not fire"; sed 's/^/        /' "$TMP/out2" | tail -6; }
+# A canvas that is the whole application: every other check is shaped around DOM
+# widgets and says nothing about it.
+mkdir -p "$TMP/canvasapp"
+printf '%s' '<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Canvas app</title><style>html,body{margin:0;height:100%;background:#111;display:grid;place-content:center}canvas{background:#222}</style><canvas width=600 height=420></canvas><script>addEventListener("keydown",()=>{})</script>' > "$TMP/canvasapp/index.html"
+node frontend-qa/scripts/qa-run.mjs "$TMP/canvasapp" --out "$TMP/qa5" --widths 1440 >"$TMP/out" 2>&1
+grep -q '\[canvas\]' "$TMP/out" && ok "sweep says outright that a canvas app is beyond what it can check" \
+  || { bad "canvas check did not fire"; sed 's/^/        /' "$TMP/out" | tail -6; }
+
+grep -q 'button.bare' "$TMP/out2" && ! grep -q 'button.good' "$TMP/out2" \
   && ok "sweep flags a control with no focus style, and not one that has one" \
-  || { bad "focus-visibility check wrong"; sed 's/^/        /' "$TMP/out" | tail -6; }
+  || { bad "focus-visibility check wrong"; sed 's/^/        /' "$TMP/out2" | tail -6; }
 
 # ---------------------------------------------------------------- house-style
 head_ "house-style ${D}(style.py runs on the standard library alone)${Z}"
@@ -322,7 +330,34 @@ PY2
     grep -q "\[$k\]" "$TMP/out" || { bad "prose check [$k] did not fire"; sed 's/^/        /' "$TMP/out" | tail -8; break; }
   done
   grep -q '\[density\]' "$TMP/out" && grep -q '\[titles\]' "$TMP/out" \
-    && ok "prose: an off-voice deck is caught on density, sentences, punctuation, person and titles" 
+    && ok "prose: an off-voice deck is caught on density, sentences, punctuation, person and titles"
+
+  # A layout name outside the house vocabulary, and one bad slide hiding behind
+  # four conforming ones — both used to pass clean.
+  "$PYX" - "$TMP" <<'PY3'
+import sys, zipfile, re
+from pptx import Presentation
+T = sys.argv[1]
+zin = zipfile.ZipFile(f'{T}/house.pptx'); zout = zipfile.ZipFile(f'{T}/canary_layout.pptx', 'w', zipfile.ZIP_DEFLATED)
+for it in zin.infolist():
+    data = zin.read(it.filename)
+    if re.fullmatch(r'ppt/slideLayouts/slideLayout2\.xml', it.filename):
+        data = data.decode('utf8').replace('name="Title and Content"', 'name="Bold Impact Hero"').encode('utf8')
+    zout.writestr(it, data)
+zout.close(); zin.close()
+p = Presentation(f'{T}/house.pptx')
+s = p.slides.add_slide(p.slide_layouts[1])
+s.shapes.title.text = "We are thrilled to report that outlook for the coming year is extremely strong"
+s.placeholders[1].text_frame.text = ("Our team has worked incredibly hard across every part of the business this "
+  "year and we believe you will see the results of that effort reflected in the numbers that follow.")
+p.save(f'{T}/canary_oneslide.pptx')
+PY3
+  expect 2 "a slide on a layout outside the house vocabulary is caught" -- \
+    python3 house-style/scripts/style.py check "$TMP/canary_layout.pptx" --spec "$TMP/house.json"
+  python3 house-style/scripts/style.py check "$TMP/canary_oneslide.pptx" --spec "$TMP/house.json" >"$TMP/out" 2>&1
+  grep -q '\[titles\]' "$TMP/out" && grep -q '\[sentences\]' "$TMP/out" \
+    && ok "one off-style slide among four conforming ones is caught, not hidden by the median" \
+    || { bad "outlier checks did not fire"; sed 's/^/        /' "$TMP/out" | tail -6; } 
 else
   sk "docx/pptx checks — python-docx and python-pptx build the fixtures (pip install python-docx python-pptx)"
 fi

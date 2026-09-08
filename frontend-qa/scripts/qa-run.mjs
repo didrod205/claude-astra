@@ -28,7 +28,7 @@ const target = argv.find((a, i) => {
 
 if (!target) { console.error('usage: qa-run.mjs <url-or-directory> [--out qa] [--widths 390,768,1440]'); process.exit(64); }
 
-const out = resolve(flag('out', 'qa'));
+const outFlag = flag('out', null);
 const widths = flag('widths', '390,768,1440').split(',').map(Number);
 const wait = +flag('wait', 800);
 const asJson = argv.includes('--json');
@@ -36,6 +36,10 @@ const probes = await readFile(join(HERE, 'probes.js'), 'utf8');
 
 // A directory or a local file gets served; anything else is treated as a URL.
 let url = target, server = null;
+// Default beside the target, not in the working directory: the documented
+// `--out qa`, run from the skill folder, writes into the installed skill.
+let out = outFlag ? resolve(outFlag)
+        : (/^https?:\/\//.test(target) ? resolve('qa') : resolve(dirname(resolve(target)), 'qa'));
 if (!/^https?:\/\//.test(target)) {
   const p = resolve(target);
   const st = await stat(p).catch(() => null);
@@ -122,6 +126,11 @@ for (const r of runs) {
   }
   if (p.contrastSkipped) add('warn', w, 'contrast', `${p.contrastSkipped} element(s) sit on an image or gradient — contrast not verifiable, check by eye`);
   if (p.focus?.length) add('warn', w, 'a11y', `${p.focus.length} control(s) show no visible change when focused: ${cap(p.focus, 4, f => f.el)}`);
+  for (const c of p.canvasApps ?? [])
+    add('warn', w, 'canvas', `${c.el} carries the page, but has ` +
+      `${c.named ? '' : 'no accessible name'}${!c.named && !c.reachable ? ' and ' : ''}${c.reachable ? '' : 'no role or tabindex'}` +
+      `${c.controls === 0 ? '; the page has no interactive DOM controls at all' : ''}. ` +
+      'The other checks are shaped around DOM widgets and can tell you almost nothing about this page');
 
   const noAlt = p.images.filter(i => i.issue === 'no alt');
   if (noAlt.length) add('warn', w, 'a11y', `${noAlt.length} image(s) without alt: ${cap(noAlt, 4, i => i.el)}`);
@@ -143,7 +152,13 @@ if (asJson) {
   console.log(JSON.stringify({ url, ok: !errs.length, findings, shots: runs.map(r => ({ width: r.width, shot: r.shot })) }, null, 2));
 } else {
   console.log(`\nqa sweep - ${url}`);
-  console.log(`  ${runs.map(r => `${r.width}px`).join(' / ')} - ${errs.length} error(s), ${warns.length} warning(s)\n`);
+  const uniq = new Set(findings.map(f => `${f.level}\u0000${f.check}\u0000${f.msg}`));
+  const ue = new Set(errs.map(f => `${f.check}\u0000${f.msg}`)).size;
+  const uw = new Set(warns.map(f => `${f.check}\u0000${f.msg}`)).size;
+  // Count what is printed. Per-width totals over a deduplicated body is two
+  // numbers that disagree in the same six lines.
+  console.log(`  ${runs.map(r => `${r.width}px`).join(' / ')} - ${ue} error(s), ${uw} warning(s)` +
+    `${uniq.size !== findings.length ? ` (across ${widths.length} widths)` : ''}\n`);
   const groups = new Map();
   for (const f of findings) {
     const k = `${f.level}\u0000${f.check}\u0000${f.msg}`;
