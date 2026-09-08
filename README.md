@@ -132,7 +132,7 @@ TextEdit, Activity Monitor and Preview — in
 
 The surest way to find out whether a skill carries on its own is to give it, and
 a one-line brief, to a session with none of the context that built it — and to
-ask that session to be blunt about what was wrong. Three were tested this way
+ask that session to be blunt about what was wrong. Four were tested this way
 (`desktop-app-driver` cannot be: it drives the user's own machine through a
 permission dialog).
 
@@ -147,6 +147,16 @@ check was a median that one bad slide could hide behind. `frontend-qa` found tha
 its own documentation manufactured false bugs: synthetic key events do not reach
 the page at all until something clicks it first, so a tester following the skill
 literally files "Space doesn't start the game" against working code.
+
+`playable-prototype` was given *"a few prototypes about a night shift on a
+ward"*, built four that varied on pressure, information and the character of
+failure, and then caught the harness contradicting itself: a comment saying the
+lookahead player decides every 15 ticks, and a call passing 30. It had already
+retuned one of its own games — sizing a bay at exactly 30 ticks of walking — to
+escape a false reading, and wrote: *"That is the measuring instrument dictating
+the design, which is backwards."* It also found that the documented turn-per-tick
+ratio was wrong by a factor of fifteen, which had been quietly handicapping every
+turn-based prototype the skill produced.
 
 All of it is fixed, and most of it is now a check in the list above.
 
@@ -186,6 +196,16 @@ added *upward* velocity, and the player was flung out of the world before the
 first frame drew — so every screenshot for weeks was taken from underground with
 the scene frustum-culled to almost nothing, and an earlier "freeze the sim for
 capture" change had hidden it rather than fixed it.
+
+**A clean run answers the question it was asked, not the one you have.** A game
+prototype passed every check — playable, deterministic, no dead inputs, a
+lookahead player scoring 10x random — while its dominant strategy was to ignore
+every mechanic it had. Each check was true; all of them are about a *random*
+player. Two rounds of fixes later every strategy scored the same, because the
+thing that actually separated them was harm and the score was not looking at it.
+A prototype whose score does not move with the thing the game is about will read
+as balanced, deterministic, playable and deep, and still not be a game about that
+thing.
 
 **Measuring the thing people call unmeasurable.** Density, sentence length and
 title style were documented as needing a human to read the samples. `"Q3 Revenue"`
@@ -307,12 +327,11 @@ node playable-prototype/scripts/playtest.mjs prototypes/ --out shots --ticks 120
 ```
 playtest — 3 prototype(s), 1200 ticks, 5 seeds
 
-  ok  a-beam   random 12 (7–13 over 5 seeds) · same seed: random 7 vs lookahead 11 (1.6x) · 2/2 live
-  ok  b-watch  random  5 (2–9 over 5 seeds)  · same seed: random 9 vs lookahead 13 (1.4x) · 3/3 · turn-based
-  !   c-buoys  random 14 (12–14 over 5 seeds) · same seed: random 9 vs lookahead 9 (1.0x) · 5/5 live
-        ! [depth] a shallow lookahead player did not beat random on the same seed
+  ok  a-beam   random 12 (7–13 over 5 seeds) · random 8 vs lookahead 10 over 3 seeds (1.2x) · 2/2 actions live · 11 ms/1000t
+  ok  b-watch  random  5 (2–9 over 5 seeds)  · random 5 vs lookahead 28 over 3 seeds (5.6x) · 3/3 actions live · 15 ms/1000t · turn-based
+  ok  c-buoys  random 14 (12–14 over 5 seeds) · random 8 vs lookahead  9 over 3 seeds (1.1x) · 5/5 actions live · 19 ms/1000t
 
-  2 clean · 1 with warnings · 0 not playable
+  3 clean · 0 with warnings · 0 not playable
 ```
 
 <p align="center">
@@ -330,8 +349,16 @@ seeded, so *"what if I had pressed something else"* has an exact answer: replay
 from the seed with a different next action. Comparing a player that does that
 against one pressing at random measures whether the inputs carry a decision —
 the question a prototyping pass exists to answer, and not one you can get by
-playing the thing once. A `1.0x` is flagged, with both of its possible causes
-named: no decision, or a payoff slower than a shallow lookahead can see.
+playing the thing once.
+
+The warning is deliberately **not** a threshold on that ratio. One greedy choice
+per fifteen ticks against a random tail is a weak player, so a ratio near 1.0 is
+normal for a game with real decisions in it — `c-buoys` above sits at 1.1x and is
+fine. An earlier rule that flagged anything at or under 1.0x was catching three
+sound prototypes out of four. What is actually diagnostic is a lookahead player
+that **never wins on any seed**, and that is what gets flagged now, with both of
+its causes named: no decision, or a payoff slower than a shallow lookahead can
+see.
 
 You can drive any prototype the same way:
 
@@ -339,6 +366,37 @@ You can drive any prototype the same way:
 __game.seed(7); __game.reset(); __game.start();
 __game.input('right', true); __game.step(60); __game.state()
 ```
+
+**Past the first clean run.** Everything above measures a prototype against a
+*random* player, which is the right question for *is this playable* and the wrong
+one for *is the thing I built the thing being played*. A prototype from a
+different run — one of four about a night shift on a ward — was developed further
+to find out how far a clean run goes. The answer is: not very.
+
+<p align="center">
+  <img src="media/differential.png" width="900" alt="A night-shift emergency medicine prototype: a patient card with vitals, and a panel showing a probability distribution over five diagnoses">
+  <br><em><code>examples/differential</code> — the panel on the right is a real posterior, and a calibration run says so. It claimed 69% across 271 commitments; a correct treatment settles a patient four times in five, so an honest panel predicts 55% settling. 54% settled.</em>
+</p>
+
+It passed the harness on its first build — no warnings, a lookahead player
+scoring **10x** random. The number was worthless. The dominant strategy at the
+time was to ignore every mechanic in the game and press a treatment button until
+something worked.
+
+Nothing generic can catch that; it needs instruments that know what your game
+claims about itself. Three are written up, with what each one caught, in
+[`examples/differential/`](playable-prototype/examples/differential/):
+
+| instrument | the question | what it caught |
+|---|---|---|
+| **calibration** | is a number the game shows the player *true*? | the posterior read 55% where the answer was 40% |
+| **economy** | what does each purchase actually buy? | free evidence already gave 78% — every test, the scanner and the clock were a rounding error |
+| **policy race** | do the decisions matter? | "never order anything" beat working patients up, 37 a night to 30 |
+
+The policy race is the one to write first if you write only one. It caught three
+separate failures in the same table, and the third is invisible from every other
+angle: after two rounds of fixes **every policy scored the same**. What differed
+was harm — 19 a night against 10 — and the score was not looking at it.
 
 ### frontend-qa
 
