@@ -376,23 +376,39 @@ __game.input('right', true); __game.step(60); __game.state()
 
 **Past the first clean run.** Everything above measures a prototype against a
 *random* player, which is the right question for *is this playable* and the wrong
-one for *is the thing I built the thing being played*. A prototype from a
-different run — one of four about a night shift on a ward — was developed further
-to find out how far a clean run goes. The answer is: not very.
+one for *is the thing I built the thing being played*. Four prototypes from one
+brief — a night shift on a ward — were taken past that point to find out how far
+a clean run goes. All four passed the harness. All four were broken.
+
+**Three of them could not be measured at all until they were opened up.** Their
+`state()` looked like this:
+
+```js
+state: () => ({ status, tick, score, lives, x, needs, worst })
+//                                          ↑ a count, and the worst timer
+```
+
+The screen showed six doors, each with a countdown and a job in progress. The
+state showed *how many* and *the worst one*. Every check in the harness passes on
+that, because every check drives the game with a random player and a random
+player never needed to know which door — but it means no other player can exist.
+You cannot write "go to the nearest one" against a count. All three got the idea
+from a sentence in this skill's own reference, *"not the full entity list; a count
+is enough"*, which is now the section arguing the opposite.
+
+---
 
 <p align="center">
   <img src="media/differential.png" width="900" alt="A night-shift emergency medicine prototype: a patient card with vitals, and a panel showing a probability distribution over five diagnoses">
   <br><em><code>examples/differential</code> — the panel on the right is a real posterior, and a calibration run says so. It claimed 69% across 271 commitments; a correct treatment settles a patient four times in five, so an honest panel predicts 55% settling. 54% settled.</em>
 </p>
 
-It passed the harness on its first build — no warnings, a lookahead player
-scoring **10x** random. The number was worthless. The dominant strategy at the
+**Differential** passed on its first build with no warnings and a lookahead player
+scoring **10x** random. The number was worthless: the dominant strategy at the
 time was to ignore every mechanic in the game and press a treatment button until
-something worked.
-
-Nothing generic can catch that; it needs instruments that know what your game
-claims about itself. Three are written up, with what each one caught, in
-[`examples/differential/`](playable-prototype/examples/differential/):
+something worked. Nothing generic can catch that — it needs instruments that know
+what your game claims about itself. Three are written up, with what each one
+caught, in [`examples/differential/`](playable-prototype/examples/differential/):
 
 | instrument | the question | what it caught |
 |---|---|---|
@@ -405,34 +421,91 @@ separate failures in the same table, and the third is invisible from every other
 angle: after two rounds of fixes **every policy scored the same**. What differed
 was harm — 19 a night against 10 — and the score was not looking at it.
 
-The other three prototypes from that brief were taken the same way, and are in
-[`examples/night-shift/`](playable-prototype/examples/night-shift/).
+---
 
 <p align="center">
   <img src="media/night-shift.png" width="940" alt="Three night-shift prototypes side by side: a corridor of call bells, a grid ward of beds, and four ward cards with arrival traces">
-  <br><em>Call Bell · Rounds · Charge Nurse. Red rings mark what you cannot leave, the pips under each bed are what it will cost you, and the traces on the ward cards are the swell you are betting on — none of which existed before a policy race asked what the decisions actually were.</em>
+  <br><em>Call Bell · Rounds · Charge Nurse, in <a href="playable-prototype/examples/night-shift/"><code>examples/night-shift</code></a>. Red rings mark what you cannot leave, the pips under each bed are what it will cost you, and the traces on the ward cards are the swell you are betting on — none of which existed before a policy race asked what the decisions actually were.</em>
 </p>
 
-All three passed the harness cleanly and all three were broken:
+The other three needed only the one instrument, and it was enough each time.
 
-- **Rounds** called itself a routing puzzle. **Every policy scored exactly 38, lost
-  nobody and reached dawn twelve nights out of twelve** — including one written to
-  refuse to cross the only gap between its two corridors.
-- **Call Bell** promised bells ringing faster than you can walk. A nearest-door
-  player answered 15 of 16 and spent a seventh of the shift standing still. Once
-  that was fixed, four different policies scored 19, 19, 19 and 19: one server on
-  a corridor makes distance the whole answer unless the calls differ in worth.
-- **Charge Nurse** said every command is a bet placed a minute before it pays off.
-  Giving *one* order at handover and never touching the controls again beat every
-  policy that managed anything, because the arrival rates were fixed — there was
-  nothing to bet on — and the floor was saturated, which makes every reassignment
-  pure loss.
+**Rounds** — *"a routing puzzle wearing scrubs; the gap is the only way between
+the two corridors."* The clearest failure of the four:
 
-Before any of that could be measured, three of the four had to be opened up at
-all. Their `state()` returned a count of live calls and the worst timer, so the
-only player that could exist was a random one — and `references/contract.md` was
-where they got the idea, in a sentence that said a count is enough. That sentence
-is now the section arguing the opposite.
+```
+before   nearest need · soonest to expire · savable-then-near · stay local
+         all four                         38 settled · 0 harmed · 12/12 dawn
+
+after    nearest need                     35 settled · 1 harmed · 12/12
+         top corridor only                22 settled · 4 harmed ·  2/12
+         the ones you cannot leave        33 settled · 0 harmed · 12/12
+```
+
+`top corridor only` is the check that the map is load-bearing at all — it is
+written to refuse the gap outright and work half the ward. The stay-local policy
+in the first run was softer than that and quietly crossed when its own corridor
+went quiet, which is its own small lesson about instruments: a policy that falls
+back is not testing what its name says.
+
+A 34–52 turn fuse on a ward you cross in eight steps is not a constraint. The
+instrument found something else first, by deadlocking: holding no action passes
+no turn, so a player who clears the board **freezes the clock** — one prototype
+stopped dead at turn 34 of 200, and being good at it was what caused that.
+
+**Call Bell** — *"bells ring faster than you can walk."* They did not: a
+nearest-door player answered fifteen a night out of roughly sixteen, lost one
+patient, reached dawn twelve nights out of twelve and spent a seventh of the shift standing
+still. Raising the load fixed the idling and exposed the real problem, which no
+tuning would have fixed — four different policies scoring 19, 19, 19 and 19.
+
+```
+before   nearest door / finish what you began / cheapest job / triage    all 19
+
+after    nearest door                     16 answered · 4 falls ·  4/12 dawn
+         triage: drop the lost            20 answered · 3 falls · 10/12
+         falls first, then near           18 answered · 1 fall  · 12/12
+```
+
+Twenty answered at three falls, or eighteen at one and a shift you always finish.
+Getting there took two fixes: the four kinds of call had been four labels over
+identical mechanics, and even after they differed, *dropping* patients still
+scored higher than catching them. So the penalty is now paid in the currency the
+game is played in — someone on the floor has to be picked up, and it takes longer
+than the call you saved by walking past.
+
+**Charge Nurse** — *"every command is a bet placed a minute before it pays off;
+nothing kills you, the shift just gets worse."* Both halves were false.
+
+```
+before   keep A&E covered                152 seen  ← one order, at handover, then nothing
+         cover the biggest               116 seen
+         never move anyone               107 seen · 180 diverted
+
+after    never move anyone                75 seen ·  90 diverted
+         keep A&E covered                 97 seen ·  66 diverted
+         bet on the swell                117 seen ·  42 diverted
+```
+
+Two structural reasons a static assignment won, and neither is a tuning problem.
+The arrival rates were **fixed**, so there was nothing to bet on; wards now swell
+out of phase with each other and the board shows the trend, because a bet you
+cannot read is a coin toss. And the floor was **saturated** — three nurses cleared
+0.33 tasks a tick against four wards producing 0.32 — which makes every
+reassignment pure loss, since there is always work where you already stand.
+Diverting ambulances, the stated failure mode, was not merely free but better than
+free, since it capped the queue; a diverted ward now runs at half speed while it
+settles.
+
+**Two shapes worth knowing before you build.** Both turned up more than once, in
+games that look nothing alike:
+
+- **One server plus travel makes distance the whole answer** — nearest-first is
+  near-optimal and every other rule collapses onto it — unless the jobs differ in
+  what they are worth and what it costs to miss one.
+- **In a saturated system every reassignment is a loss.** If your game is about
+  allocating attention, some of it has to be idle some of the time, or the
+  allocation is not a decision.
 
 ### frontend-qa
 
