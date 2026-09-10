@@ -492,7 +492,18 @@ def check(produced, spec):
             problems.append(('error', base, 'read', d['error']))
             continue
 
+        # The theme, as well as what the runs say. extract() folds a document's
+        # theme fonts and colours into the spec (see build_spec) while check()
+        # used to compare only what was explicitly applied — so the two halves
+        # were looking at different places. A deck built the way corporate
+        # templates are built, with every run inheriting from the theme and no
+        # explicit formatting anywhere, therefore had NOTHING to check: swapping
+        # its entire font scheme to Impact passed clean on three different real
+        # files. Three of the five structural checks were inert on exactly the
+        # documents most likely to be handed to this tool.
+        theme = d.get('theme') or {}
         used_fonts = set((d.get('fonts_used') or {}))
+        used_fonts |= {f for f in (theme.get('fonts') or {}).values() if f}
         for st in (d.get('styles') or {}).values():
             if st.get('font'):
                 used_fonts.add(st['font'])
@@ -502,6 +513,7 @@ def check(produced, spec):
                              f"typefaces not in the house set: {', '.join(off[:6])}"))
 
         used_colors = set(d.get('colors_used') or {})
+        used_colors |= {c for c in (theme.get('colors') or {}).values() if c}
         for st in (d.get('styles') or {}).values():
             if st.get('color'):
                 used_colors.add(st['color'])

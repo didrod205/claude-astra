@@ -185,3 +185,36 @@ position — read a position off the HUD to write a `--pose` for a repeatable sh
 Hand this to the user when the audit is clean and the shots look right. It is
 the only check that catches "the collision is technically correct but walking
 through the doorway is annoying."
+
+
+## Reachability — `reach.mjs`
+
+Every check above is about whether the scene is *built* correctly. This one is
+about whether it can be *used*.
+
+```bash
+node scripts/reach.mjs my-scene [--cell 1.0] [--radius 45] [--from x,y,z]
+```
+
+It flood-fills the walkable space from spawn. Each edge is a real walk with the
+real controller — hold W for one cell's worth of time and see where you end up —
+so a step that is too high, too narrow, or off a drop is simply not an edge. Then
+for every named object it reports the nearest place a person can stand.
+
+**Read the floor-level list, not the total.** Roofs, ceilings and lights sit above
+head height and are legitimately out of reach; the tool separates them out. What
+matters is furniture, doors, props — things that are meant to be walked up to.
+
+**What it was built to catch.** Close the bundled cabin's door across its own
+doorway and `audit.mjs` still exits clean: the spawn is fine, the ground holds
+you, nothing is buried, no doorway is too narrow because the doorway is still
+there. `reach.mjs` reports eleven objects out of reach, and they are the entire
+contents of the room.
+
+**Cost.** About a minute on a 70 x 70 m scene. It used to be unaffordable: the
+controller's `floorAt` raycast every collider, terrain included, and a 140x140
+heightfield is 39,200 triangles with nothing to accelerate it — 6.8 ms for one
+floor query. Terrain is a regular grid, so it is now sampled analytically and
+everything else is raycast only if its footprint contains the point. Same answers
+to 14 mm on 4,000 random samples, 790 times faster, and `walk.mjs` and the audit's
+spawn-drift check got the same speedup for free.

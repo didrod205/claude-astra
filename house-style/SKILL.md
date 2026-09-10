@@ -41,6 +41,7 @@ is a zip of XML; the theme block names the typefaces and the palette outright.
 2. Read the summary. Fill in what the numbers cannot say (voice, structure).
 3. Write the document — via the docx / pptx / xlsx skill, to the spec.
 4. python3 scripts/style.py check <your file> --spec style.json
+   (once, after step 1: python3 scripts/probe.py <a sample> --spec style.json)
 5. Fix what it reports. Repeat.
 ```
 
@@ -128,6 +129,42 @@ Warnings are often legitimate — a new accent for a callout, a size the samples
 happened not to contain. Errors rarely are. Judge them; do not suppress them
 silently, and say in your handover which warnings you decided to keep and why.
 
+## 5. Probe — is the spec worth anything?
+
+`check` compares a document against the spec. Nothing compares the spec against
+reality, and a spec that passes everything you show it is not a spec.
+
+```bash
+python3 scripts/probe.py sample.pptx --spec style.json
+```
+
+It takes a document that passes, makes one copy per house decision with that
+decision and only that decision broken, and runs `check` on each.
+
+```
+   ok  theme typeface               font
+   ok  run typeface                 font
+   ok  palette                      color
+   ok  size ladder                  size
+   ok  page geometry                geometry
+   ok  voice: wordy, first person   density, sentences, voice, titles
+
+  6 of the 6 decisions this document could break are covered.
+```
+
+Run it once after `extract`, on one of the samples. A `BLIND` row is a decision
+the spec claims and cannot see — and that is not hypothetical. It is how the
+worst bug in this skill was found: **a deck whose formatting is entirely
+inherited from its theme, which is how corporate templates are built, had
+nothing to check at all.** `extract` read the theme; `check` read only what the
+runs explicitly applied; so the two halves were looking at different places and
+swapping the whole font scheme to Impact passed clean on three separate real
+files. Three of the five structural checks were inert on exactly the documents
+most likely to be handed to this tool.
+
+Exit 0 means every decision that document could break was caught, 1 means at
+least one went through untouched.
+
 ## Honest limits
 
 - The check reads structure, not layout. It cannot see that a title overflows its
@@ -138,10 +175,14 @@ silently, and say in your handover which warnings you decided to keep and why.
 - `.doc`, `.ppt`, `.key`, `.pages`, and Google formats are not OOXML and are not
   read. Ask for an exported `.docx` / `.pptx` / `.pdf`.
 - A single sample gives a thin spec. Three is where it gets reliable.
+- `probe.py` can only break what a given document contains. Rows marked `--` are
+  dimensions that document had nothing to test — run it on your richest sample.
 
 ## Files
 
 - `scripts/style.py` — `extract` and `check`. Standard library, plus PyMuPDF for PDF
+- `scripts/probe.py` — breaks one house decision at a time to see what the spec
+  can actually catch. Standard library
 - `references/spec.md` — every field, where it comes from, how far to trust it
 - `references/voice.md` — reading tone and structure from samples, and the
   handover checklist

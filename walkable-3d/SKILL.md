@@ -157,6 +157,46 @@ the usual cause. The ones worth memorising:
 | `passage` | a gap under 0.7 m between two wall-like slabs — nobody fits through |
 | `solid` | low solid trim, which is a fence you cannot step over |
 
+## Can a person get to it?
+
+The audit proves the spawn point is not inside a wall. It says nothing about
+whether the building has a way in, whether a room is sealed behind a doorway too
+narrow to walk through, or whether half of what you modelled is somewhere nobody
+can stand. **A scene can audit clean, photograph well, and still be a diorama.**
+
+```bash
+node scripts/reach.mjs my-scene
+```
+
+It floods the space from spawn, walking every edge with the real controller — so
+a step a person could not take is not an edge — and then reports which named
+objects at floor level are within reach of somewhere you can stand.
+
+```
+  2397 standing places · 2397 m² · 71.5 x 69.2 m of ground
+  92 of 92 named objects at floor level are within 2 m of somewhere you can stand
+  (20 more sit above head height — roofs, ceilings, lights).
+
+  Nothing modelled at floor level is somewhere a person cannot get to.
+```
+
+Swing the cabin's front door shut across its opening and the audit still passes
+clean, while this reports eleven things out of reach — the table, the chairs, the
+lamp, every stick of furniture in the room:
+
+```
+  81 of 92 named objects at floor level are within 2 m of somewhere you can stand
+
+  at floor level and out of reach:
+      2.71 m away   leg_3
+      2.13 m away   table_top
+      ...
+```
+
+Exit 0 clean · 1 something at floor level is out of reach · 2 nowhere to stand at
+all. Scenery across a ravine belongs on that list and the tool cannot tell it from
+a sealed room — you can. Run it once per scene, after the audit is clean.
+
 ## From here into Blender / Unreal / a game
 
 `export-glb.mjs` writes a `.glb` that keeps names and parenting. Blender:
@@ -171,8 +211,8 @@ use, in `references/export.md`.
 - `references/scale.md` — real-world dimensions, layout method, lighting presets
 - `references/verification.md` — every audit check, how to read the shots
 - `references/export.md` — glTF out, Blender/Unreal import, Blender `bpy` path
-- `scripts/audit.mjs`, `walk.mjs`, `ground.mjs`, `shot.mjs`, `serve.mjs`,
-  `export-glb.mjs`, `lib.mjs`
+- `scripts/audit.mjs`, `walk.mjs`, `reach.mjs`, `ground.mjs`, `shot.mjs`,
+  `serve.mjs`, `export-glb.mjs`, `lib.mjs`
 
 Scripts are zero-dependency Node (22+) driving headless Chrome over CDP. They
 find Chrome themselves; set `CHROME_BIN` to override, `W3D_GL=angle` to use the

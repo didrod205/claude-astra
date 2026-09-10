@@ -59,7 +59,7 @@ whether bullets end in a full stop, how long a heading runs.
 
 ## Verified
 
-`./verify.sh` reproduces every claim below. 30 checks, no arguments, no setup —
+`./verify.sh` reproduces every claim below. 36 checks, no arguments, no setup —
 it builds its own fixtures in a temp directory and cleans up after itself.
 
 ```
@@ -70,8 +70,10 @@ walkable-3d
   ok    audit fails a scene that does not hold the player up
   ok    a terrain scene audits clean and holds the player up
   ok    the player can walk across terrain in every direction
-  ok    the player can walk in through the front door
   ok    audit catches a first draft with no lights, solid kerbing and a doorway too narrow to use
+  ok    the player can walk in through the front door
+  ok    reach: nothing in the bundled scene is somewhere you cannot get to
+  ok    reach: a cabin sealed shut leaves its furniture unreachable (audit: exit 0)
   ok    --plan cuts through the roof for an interior view
   ok    glTF export keeps object names and parenting
 playable-prototype
@@ -84,16 +86,19 @@ frontend-qa
   ok    sweep catches console errors, overflow, broken images and duplicate ids
   ok    sweep flags a page with no viewport meta
   ok    sweep computes colour contrast and flags text below AA
-  ok    sweep flags a control with no focus style, and not one that has one
   ok    sweep says outright that a canvas app is beyond what it can check
+  ok    sweep flags a control with no focus style, and not one that has one
+  ok    keyboard: every control on a plain page is on the Tab path
+  ok    keyboard: a div-button and a tabindex=-1 control are both reported
 house-style (style.py runs on the standard library alone)
-  ok    pdf: the reference matches its own spec
-  ok    pdf: a drifted file is caught on face, colour and size
+  skip  pdf checks — PyMuPDF not installed (pip install pymupdf)
   ok    docx: a real Word file matches its own spec
   ok    pptx: a real PowerPoint file matches its own spec
   ok    docx: off-house face and off-ladder size are caught
   ok    pptx: off-house face, 16:9 geometry and off-ladder size are caught
+  ok    pptx: a swapped theme font scheme is caught, not only explicit runs
   ok    prose: the house deck matches its own voice
+  ok    probe: all six house decisions a deck can break are covered
   ok    prose: an off-voice deck is caught on density, sentences, punctuation, person and titles
   ok    a slide on a layout outside the house vocabulary is caught
   ok    one off-style slide among four conforming ones is caught, not hidden by the median
@@ -120,6 +125,12 @@ No skill's *judgement* is tested here, only its tooling. `verify.sh` proves the
 audit catches a trapped spawn — not that a scene looks good; proves the sweep
 catches an overflow — not that a page is usable; proves the playtest catches a
 dead input — not that a game is fun.
+
+Six of the thirty-six exist because the tooling was checking rules and nothing was
+checking the rules: they run `probe.py`, `reach.mjs` and `keyboard.mjs` both ways
+— on an artefact that should pass, and on one broken in exactly one place — and
+each pair was written after the instrument found a real blind spot in the skill it
+belongs to.
 
 `desktop-app-driver` is absent from `verify.sh` and always will be: it drives the
 user's own machine through a permission dialog, so there is nothing to automate.
@@ -196,6 +207,37 @@ added *upward* velocity, and the player was flung out of the world before the
 first frame drew — so every screenshot for weeks was taken from underground with
 the scene frustum-culled to almost nothing, and an earlier "freeze the sim for
 capture" change had hidden it rather than fixed it.
+
+**The same instrument idea moved to the other skills, and found the same shape
+of bug in each.** In every case the existing checker compared an artefact against
+a rule, and nothing asked whether the rule could see anything:
+
+- **house-style.** `check` compares a document against a spec; nothing compared
+  the spec against reality. `probe.py` breaks one house decision at a time in a
+  real file and reports which the spec catches. It found that **a deck whose
+  formatting is entirely inherited from its theme — which is how corporate
+  templates are built — had nothing to check at all**: swapping its whole font
+  scheme to Impact passed clean on three separate real files, because `extract`
+  read the theme and `check` read only what the runs explicitly applied. Three of
+  the five structural checks were inert on exactly the documents most likely to be
+  handed to the tool.
+- **walkable-3d.** The audit proves the spawn point is not inside a wall. It says
+  nothing about whether the building has a way in. `reach.mjs` floods the space
+  from spawn, walking every edge with the real controller. Swing the bundled
+  cabin's door shut across its own doorway and the audit still exits clean, while
+  reach reports eleven things out of reach — the table, the chairs, the lamp, the
+  entire contents of the room.
+- **frontend-qa.** The sweep checks that a focused control *looks* focused.
+  `keyboard.mjs` presses Tab and records where focus lands. On a checkout page
+  whose Pay button is a `<div onclick>`, the sweep reported a tap-target warning
+  and nothing else; the primary action of the page cannot be reached without a
+  mouse.
+
+Two of those instruments were wrong first, in the way the thing they were built
+to catch is wrong. The keyboard walk started its inventory from a focusable
+selector, so the `<div onclick>` it existed to find was not in the set and the
+page read "4 of 4 controls reachable". The document probe broke a face, a colour
+and a size with one edit and counted three covered dimensions from one test.
 
 **Documentation is a defect surface.** Three of four game prototypes shipped a
 machine API that reported *how many* things were on screen instead of what and
@@ -507,6 +549,28 @@ games that look nothing alike:
   allocating attention, some of it has to be idle some of the time, or the
   allocation is not a decision.
 
+**Can a person get to it?** The audit proves the spawn point is not inside a
+wall; it says nothing about whether the building has a way in.
+
+```bash
+node walkable-3d/scripts/reach.mjs my-scene
+```
+
+```
+  2397 standing places · 2397 m² · 71.5 x 69.2 m of ground
+  92 of 92 named objects at floor level are within 2 m of somewhere you can stand
+  (20 more sit above head height — roofs, ceilings, lights).
+```
+
+Swing the cabin's front door shut across its opening: the audit still passes
+clean, and this reports eleven things out of reach — every stick of furniture in
+the room. Making it affordable meant fixing the controller underneath it. Its
+floor query raycast every collider, terrain included, and a 140x140 heightfield
+is 39,200 triangles with nothing to accelerate it — **6.8 ms for one floor
+height**, called every step of every walk. Terrain is a regular grid, so it is
+now sampled analytically: same answers to 14 mm on 4,000 random samples, 790
+times faster, and `walk.mjs` and the audit's spawn-drift check got it for free.
+
 ### frontend-qa
 
 > *"QA this before I ship it."* · *"이거 왜 안 눌려?"* · *"테스트해줘"*
@@ -543,6 +607,21 @@ see. Both are computable: contrast from the text colour and the first opaque
 background above it, focus by comparing an element's computed style before and
 after focusing it. Where the background is an image or a gradient the tool says
 so and declines rather than guessing.
+
+**The same page without a mouse.** The sweep checks that a focused control
+*looks* focused, which is a different question from whether you can get to it.
+
+```bash
+node frontend-qa/scripts/keyboard.mjs http://localhost:3000/checkout
+```
+
+```
+  4 of 6 visible, enabled controls are on that path.
+
+  clickable, but Tab never gets there:
+    button#save          “Save for later” — tabindex="-1"
+    div#pay.btn          “Pay now” — painted like a control, but is not one
+```
 
 ### house-style
 
@@ -589,6 +668,28 @@ The `docx` / `pptx` / `xlsx` skills write the file; this one decides what goes i
 it and proves it matches. The layout names are worth more than any colour value —
 building slides from the deck's own layouts is what makes it look native.
 
+**Is the spec worth anything?** `check` compares a document against the spec.
+Nothing compares the spec against reality, and a spec that passes everything you
+show it is not a spec.
+
+```bash
+python3 house-style/scripts/probe.py sample.pptx --spec style.json
+```
+
+```
+   ok  theme typeface               font
+   ok  run typeface                 font
+   ok  palette                      color
+   ok  size ladder                  size
+   ok  page geometry                geometry
+   ok  voice: wordy, first person   density, sentences, voice, titles
+
+  6 of the 6 decisions this document could break are covered.
+```
+
+A `BLIND` row is a decision the spec claims and cannot see. That is how the worst
+bug in this skill was found — see *What running them found*.
+
 ### desktop-app-driver
 
 > *"Lay this schematic out in KiCad."* · *"이 앱에서 직접 해줘"* · *"설치하고 테스트해줘"*
@@ -626,7 +727,7 @@ exposed — typing into its search field filtered a table the tree never describ
 ## Try it without asking Claude
 
 ```bash
-./verify.sh                                                   # all 30 checks, ~9 min
+./verify.sh                                                   # all 36 checks, ~12 min
 node walkable-3d/scripts/serve.mjs walkable-3d/assets/template --open
 open playable-prototype/assets/template/game.html
 ```

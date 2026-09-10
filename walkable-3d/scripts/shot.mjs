@@ -84,7 +84,12 @@ try {
   for (const p of poses) {
     await cdp.eval(`window.__setCamera(${JSON.stringify({ position: p.position, lookAt: p.lookAt })})`);
     await new Promise(r => setTimeout(r, 120));
-    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+    // 1280x800 at scale 2 is a 2560x1600 frame drawn by a software rasteriser.
+    // On a loaded machine that legitimately takes minutes, and the 120 s default
+    // turned a slow render into `Page.captureScreenshot timed out` — which the
+    // caller reported as "produced no image", sending me to look for a broken
+    // scene. It was a busy laptop.
+    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' }, { timeout: 600000 });
     const file = resolve(out, `${p.name}.png`);
     await writeFile(file, Buffer.from(data, 'base64'));
     written.push(file);
@@ -102,7 +107,12 @@ try {
     await cdp.eval(`window.__setCamera(${JSON.stringify({
       position: [pc[0], pc[1] + h, pc[2] + 0.01], lookAt: pc })})`);
     await new Promise(r => setTimeout(r, 120));
-    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+    // 1280x800 at scale 2 is a 2560x1600 frame drawn by a software rasteriser.
+    // On a loaded machine that legitimately takes minutes, and the 120 s default
+    // turned a slow render into `Page.captureScreenshot timed out` — which the
+    // caller reported as "produced no image", sending me to look for a broken
+    // scene. It was a busy laptop.
+    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' }, { timeout: 600000 });
     const file = resolve(out, `plan-${String(y).replace('.', '_')}.png`);
     await writeFile(file, Buffer.from(data, 'base64'));
     written.push(file);

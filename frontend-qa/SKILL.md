@@ -74,6 +74,40 @@ required field, with a bad email, with the network refusing. Most bugs worth
 finding live there. `references/flows.md` has the derivation method and the
 patterns per flow type.
 
+## 2b. The same page without a mouse
+
+The sweep checks that a focused control *looks* focused. That is a different
+question from whether you can get to it, and they are tested by different means:
+`el.focus()` always works, pressing Tab does not.
+
+```bash
+node scripts/keyboard.mjs http://localhost:3000/checkout
+```
+
+It presses Tab from the top of the document and records where focus actually
+lands, then compares that against everything on the page a mouse can operate —
+including the things that are controls *only* if you have a mouse.
+
+```
+  Tab reaches 4 stop(s) before the order repeats.
+  4 of 6 visible, enabled controls are on that path.
+
+  clickable, but Tab never gets there:
+    button#save          “Save for later” — tabindex="-1"
+    div#pay.btn          “Pay now” — painted like a control, but is not one
+
+  focus jumps back up the page 1 time(s) — the tab order does not follow the layout:
+    Cancel (y 355)  ->  Terms and conditions (y 315)
+```
+
+That page's primary action cannot be reached without a mouse, and the sweep
+reported nothing but a tap-target warning. **Start the inventory from what a
+mouse can click, not from a focusable selector** — a `<div onclick>` matches no
+focusable selector, so a check built on one can never see it. The first version
+of this script called that page "4 of 4 controls reachable".
+
+Exit 0 clean · 1 something clickable is off the Tab path.
+
 ## 3. Report
 
 Lead with the verdict, then evidence, then everything you could not check.
@@ -112,6 +146,7 @@ site, restrict yourself to read-only navigation and say so in the report.
 ## Files
 
 - `scripts/qa-run.mjs` — the sweep. Zero-dependency Node 22+, headless Chrome
+- `scripts/keyboard.mjs` — the Tab walk: what a mouse can reach and Tab cannot
 - `scripts/probes.js` — the in-page checks (edit here to add one)
 - `scripts/lib.mjs` — static server, Chrome launcher, CDP client
 - `references/checks.md` — every check, its threshold, its blind spots

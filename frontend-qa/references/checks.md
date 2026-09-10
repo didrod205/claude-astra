@@ -79,3 +79,39 @@ The sweep is a static snapshot of the loaded page. It does not know about:
 Add a check by editing `probes.js` — it returns one JSON object, and `qa-run.mjs`
 turns fields into findings. Keep probes to DOM facts; leave judgement to the
 report.
+
+
+## Keyboard reachability — `keyboard.mjs`
+
+Separate from the sweep, and separate from the `focus` check inside it. The
+sweep's `focus` check asks whether a focused control looks focused; this asks
+whether Tab can get to it at all. They fail independently: a `<div onclick>`
+styled as a button has no focus style to check and never receives focus, so the
+sweep has nothing to say about it.
+
+```bash
+node scripts/keyboard.mjs <url> [--width 1280] [--max 120]
+```
+
+**Where the inventory starts is the whole design.** Enumerate focusable elements
+and Tab-walk them and every page passes, because the elements that are missing
+from the Tab path are by definition the ones that selector does not match. So the
+inventory starts from **what a mouse can operate**: focusable elements, plus
+anything visible with an `onclick` or `cursor: pointer` and a short label that is
+not already inside a control. Everything in that set is expected on the Tab path.
+
+| reported | usual cause |
+|---|---|
+| *painted like a control, but is not one* | `<div onclick>` / `<span class="btn">`. Use a `<button>`, or `role="button"` **and** `tabindex="0"` **and** an Enter/Space handler |
+| *tabindex="-1"* | deliberately removed from the tab order and never put back. Legitimate for a control you focus programmatically (a dialog), a defect for anything a user is meant to press |
+| *focusable, but Tab does not arrive* | a focus trap, an `inert` ancestor, or a listener calling `preventDefault()` on Tab |
+| *focus jumps back up the page* | positive `tabindex` values. They jump ahead of everything with `tabindex="0"`, so the order stops matching the layout |
+
+The page must be focus-emulated (`Emulation.setFocusEmulationEnabled`) or Tab
+goes nowhere at all, the same trap the sweep documents for `:focus`.
+
+**Blind spots.** It does not press Enter or Space, so a `role="button"` with a
+tabindex and no key handler passes — it is on the Tab path and does nothing.
+It does not test arrow-key navigation inside composite widgets (menus, grids,
+tab lists), where the correct pattern is one tab stop and arrows within. And a
+`cursor: pointer` on a decorative card is a false positive; read the list.

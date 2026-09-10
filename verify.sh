@@ -46,7 +46,10 @@ JSON
 expect 2 "audit fails a scene with the player trapped in geometry" -- \
   node walkable-3d/scripts/audit.mjs "$TMP/broken"
 
-node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn >/dev/null 2>&1
+# --scale 1 and a small frame: this asserts that a headless render reaches a PNG,
+# not that it is pretty, and a 2560x1600 software render makes the suite hostage
+# to how busy the machine is.
+node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn --scale 1 --w 900 --h 560 >/dev/null 2>&1
 [ -s "$TMP/shots/spawn.png" ] && ok "shot.mjs renders a frame headlessly" || bad "shot.mjs produced no image"
 
 # A scene can be structurally perfect and still not hold the player up.
@@ -116,6 +119,37 @@ node -e '
   if (r.distance < 6) throw new Error(`blocked after ${r.distance} m`);
 ' 2>"$TMP/out" && ok "the player can walk in through the front door" \
   || { bad "front-door walk failed"; sed 's/^/        /' "$TMP/out" | tail -3; }
+
+# Reachability, both ways. The audit proves the spawn point is not inside a
+# wall; it says nothing about whether the building has a way in. A cabin with
+# its door swung shut across the opening passes the audit clean.
+node walkable-3d/scripts/reach.mjs walkable-3d/assets/template >"$TMP/reach-open.txt" 2>&1
+[ $? -eq 0 ] && ok "reach: nothing in the bundled scene is somewhere you cannot get to" \
+  || { bad "reach reported unreachable objects in the bundled scene"; tail -4 "$TMP/reach-open.txt" | sed 's/^/        /'; }
+
+rm -rf "$TMP/sealed"; cp -r walkable-3d/assets/template "$TMP/sealed"
+python3 - "$TMP/sealed/scene.json" <<'PY8'
+import sys, json
+p = sys.argv[1]; d = json.load(open(p))
+def close(objs):
+    for n in objs:
+        if n.get('id') == 'door':
+            n['rotation'] = [0, 0, 0]          # swing it shut across the opening
+            return True
+        if n.get('children') and close(n['children']): return True
+    return False
+assert close(d['objects']), 'no door in the bundled scene'
+json.dump(d, open(p, 'w'), indent=1)
+PY8
+node walkable-3d/scripts/audit.mjs "$TMP/sealed" >/dev/null 2>&1
+sealed_audit=$?
+node walkable-3d/scripts/reach.mjs "$TMP/sealed" >"$TMP/reach-sealed.txt" 2>&1
+sealed_reach=$?
+if [ "$sealed_reach" -eq 1 ] && grep -q 'table_top' "$TMP/reach-sealed.txt"; then
+  ok "reach: a cabin sealed shut leaves its furniture unreachable (audit: exit $sealed_audit)"
+else
+  bad "reach did not notice a sealed cabin (exit $sealed_reach)"; tail -4 "$TMP/reach-sealed.txt" | sed 's/^/        /'
+fi
 
 node walkable-3d/scripts/shot.mjs walkable-3d/assets/template --out "$TMP/shots" --only spawn --plan 1.5 --scale 1 --w 640 --h 400 >/dev/null 2>&1
 [ -s "$TMP/shots/plan-1_5.png" ] && ok "--plan cuts through the roof for an interior view" || bad "--plan produced no image"
@@ -236,6 +270,43 @@ grep -q 'button.bare' "$TMP/out2" && ! grep -q 'button.good' "$TMP/out2" \
   && ok "sweep flags a control with no focus style, and not one that has one" \
   || { bad "focus-visibility check wrong"; sed 's/^/        /' "$TMP/out2" | tail -6; }
 
+# Keyboard reachability, both ways. The sweep checks that a focused control LOOKS
+# focused; nothing checked that Tab can get to it. A <div onclick> matches no
+# focusable selector, so a page whose primary action is one is unusable without a
+# mouse and reports clean.
+mkdir -p "$TMP/kbclean" "$TMP/kbbroken"
+cat > "$TMP/kbclean/index.html" <<'HTML'
+<!doctype html><meta charset="utf-8"><title>checkout</title>
+<style>body{font:15px/1.5 system-ui;margin:40px}button{padding:10px 18px}</style>
+<h1>Checkout</h1>
+<p><label>Name <input id="name"></label></p>
+<p><label>Card <input id="card"></label></p>
+<p><button id="pay">Pay now</button></p>
+<p><button id="cancel">Cancel</button></p>
+HTML
+cat > "$TMP/kbbroken/index.html" <<'HTML'
+<!doctype html><meta charset="utf-8"><title>checkout</title>
+<style>body{font:15px/1.5 system-ui;margin:40px}
+.btn{display:inline-block;padding:10px 18px;background:#2b5fd9;color:#fff;cursor:pointer}</style>
+<h1>Checkout</h1>
+<p><label>Name <input id="name"></label></p>
+<p><label>Card <input id="card"></label></p>
+<p><div class="btn" id="pay" onclick="void 0">Pay now</div></p>
+<p><button id="save" tabindex="-1">Save for later</button></p>
+<p><button id="cancel">Cancel</button></p>
+HTML
+node frontend-qa/scripts/keyboard.mjs "$TMP/kbclean/index.html" >"$TMP/kb1" 2>&1
+kb1=$?
+node frontend-qa/scripts/keyboard.mjs "$TMP/kbbroken/index.html" >"$TMP/kb2" 2>&1
+kb2=$?
+[ "$kb1" -eq 0 ] && ok "keyboard: every control on a plain page is on the Tab path" \
+  || { bad "keyboard walk failed a clean page"; sed 's/^/        /' "$TMP/kb1" | tail -6; }
+if [ "$kb2" -eq 1 ] && grep -q 'div#pay' "$TMP/kb2" && grep -q 'button#save' "$TMP/kb2"; then
+  ok "keyboard: a div-button and a tabindex=-1 control are both reported"
+else
+  bad "keyboard walk missed a mouse-only control (exit $kb2)"; sed 's/^/        /' "$TMP/kb2" | tail -8
+fi
+
 # ---------------------------------------------------------------- house-style
 head_ "house-style ${D}(style.py runs on the standard library alone)${Z}"
 if python3 -c "import fitz" 2>/dev/null; then
@@ -299,6 +370,26 @@ PY
   expect 2 "pptx: off-house face, 16:9 geometry and off-ladder size are caught" -- \
     python3 house-style/scripts/style.py check "$TMP/drift.pptx" --spec "$TMP/pptx.json"
 
+  # A deck whose formatting is entirely inherited from its theme — which is how
+  # corporate templates are built — used to have nothing to check at all:
+  # swapping the whole font scheme to Impact passed clean, because extract read
+  # the theme and check did not.
+  python3 - "$TMP" <<'PY9'
+import sys, re, zipfile, os
+T = sys.argv[1]
+src, dst = os.path.join(T, 'real.pptx'), os.path.join(T, 'themeswap.pptx')
+with zipfile.ZipFile(src) as z:
+    names, data = z.namelist(), {n: z.read(n) for n in z.namelist()}
+for n in names:
+    if re.match(r'ppt/theme/theme\d+\.xml$', n):
+        data[n] = re.sub(r'typeface="[^"]*"', 'typeface="Impact"', data[n].decode()).encode()
+with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as z:
+    for n in names:
+        z.writestr(n, data[n])
+PY9
+  expect 2 "pptx: a swapped theme font scheme is caught, not only explicit runs" -- \
+    python3 house-style/scripts/style.py check "$TMP/themeswap.pptx" --spec "$TMP/pptx.json"
+
   # Voice, not just colour: the same visual system written two different ways.
   "$PYX" - "$TMP" <<'PY2'
 import sys
@@ -325,6 +416,13 @@ PY2
   python3 house-style/scripts/style.py extract "$TMP/house.pptx" -o "$TMP/house.json" >/dev/null 2>&1
   expect 0 "prose: the house deck matches its own voice" -- \
     python3 house-style/scripts/style.py check "$TMP/house.pptx" --spec "$TMP/house.json"
+
+  # And the instrument that found the theme blind spot: break one house decision
+  # at a time in a real deck and see which ones the spec can actually see. Exit 0
+  # means all six were caught — face, palette, size and geometry as well as the
+  # theme they are inherited from, and the voice.
+  expect 0 "probe: all six house decisions a deck can break are covered" -- \
+    python3 house-style/scripts/probe.py "$TMP/house.pptx" --spec "$TMP/house.json"
   python3 house-style/scripts/style.py check "$TMP/offvoice.pptx" --spec "$TMP/house.json" >"$TMP/out" 2>&1
   for k in density sentences punctuation voice titles; do
     grep -q "\[$k\]" "$TMP/out" || { bad "prose check [$k] did not fire"; sed 's/^/        /' "$TMP/out" | tail -8; break; }

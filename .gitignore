@@ -3,3 +3,5 @@ shots/
 qa/
 *.glb
 .DS_Store
+__pycache__/
+*.pyc

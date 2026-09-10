@@ -210,7 +210,51 @@ function terrainGeometry(o) {
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  // A regular grid, so there is never a reason to raycast it. See heightfield().
+  geo.userData.field = { w, d, seg };
   return geo;
+}
+
+/** O(1) height lookup for a terrain mesh, by bilinear sample of its own grid.
+ *
+ *  floorAt() raycast every collider, terrain included, and a 140x140 heightfield
+ *  is 39,200 triangles with nothing to accelerate it: one floor query measured
+ *  6.8 ms. The walk controller calls it every step, so `walk.mjs --dirs 8`
+ *  spent most of half a minute inside three.js, the audit's spawn-drift check
+ *  the same, and a reachability sweep was simply not affordable. This is the
+ *  same number, exactly, for about five microseconds.
+ *
+ *  Built once from the position attribute rather than from PlaneGeometry's
+ *  vertex order, so it stays correct if that ever changes. */
+function heightfield(mesh) {
+  const g = mesh.geometry, f = g.userData?.field;
+  if (!f) return null;
+  mesh.updateWorldMatrix(true, false);
+  const e = mesh.matrixWorld.elements;
+  // Translation only. Anything rotated or scaled falls back to the raycast.
+  const rotated = Math.abs(e[0] - 1) > 1e-6 || Math.abs(e[5] - 1) > 1e-6 || Math.abs(e[10] - 1) > 1e-6 ||
+                  Math.abs(e[1]) > 1e-6 || Math.abs(e[2]) > 1e-6 || Math.abs(e[4]) > 1e-6 ||
+                  Math.abs(e[6]) > 1e-6 || Math.abs(e[8]) > 1e-6 || Math.abs(e[9]) > 1e-6;
+  if (rotated) return null;
+  const ox = e[12], oy = e[13], oz = e[14];
+  const p = g.attributes.position, n = f.seg + 1, h = new Float32Array(n * n);
+  for (let i = 0; i < p.count; i++) {
+    const ix = Math.round((p.getX(i) + f.w / 2) / f.w * f.seg);
+    const iz = Math.round((p.getZ(i) + f.d / 2) / f.d * f.seg);
+    if (ix >= 0 && ix < n && iz >= 0 && iz < n) h[iz * n + ix] = p.getY(i);
+  }
+  return {
+    mesh,
+    minX: ox - f.w / 2, maxX: ox + f.w / 2, minZ: oz - f.d / 2, maxZ: oz + f.d / 2,
+    at(x, z) {
+      const fx = (x - ox + f.w / 2) / f.w * f.seg, fz = (z - oz + f.d / 2) / f.d * f.seg;
+      if (!(fx >= 0 && fx <= f.seg && fz >= 0 && fz <= f.seg)) return null;
+      const i0 = Math.min(f.seg - 1, Math.floor(fx)), j0 = Math.min(f.seg - 1, Math.floor(fz));
+      const u = fx - i0, v = fz - j0, i1 = i0 + 1, j1 = j0 + 1;
+      const a = h[j0 * n + i0], b = h[j0 * n + i1], c2 = h[j1 * n + i0], d2 = h[j1 * n + i1];
+      return oy + (a * (1 - u) + b * u) * (1 - v) + (c2 * (1 - u) + d2 * u) * v;
+    },
+  };
 }
 
 /* --------------------------------------------------------- rounded boxes ---
@@ -480,7 +524,7 @@ function buildScene(manifest, renderer) {
 
 /* ---------------------------------------------------------------- controls */
 
-function makeController(camera, solids, colliders, spawn) {
+function makeController(camera, solids, colliders, spawn, fields = []) {
   const state = { yaw: 0, pitch: 0, vy: 0, onGround: false, keys: new Set() };
   const pos = new THREE.Vector3(...(spawn?.position ?? [0, EYE, 4]));
 
@@ -502,11 +546,26 @@ function makeController(camera, solids, colliders, spawn) {
 
   const ray = new THREE.Raycaster();
   const DOWN = new THREE.Vector3(0, -1, 0);
+  const _near = [];
   const floorAt = (x, z, fromY, far = 60) => {
-    ray.set(new THREE.Vector3(x, fromY, z), DOWN);
-    ray.far = far;
-    const hit = ray.intersectObjects(colliders, false)[0];
-    return hit ? hit.point.y : null;
+    let best = null;
+    for (const f of fields) {
+      const y = f.at(x, z);
+      if (y != null && y <= fromY && y >= fromY - far && (best === null || y > best)) best = y;
+    }
+    _near.length = 0;
+    for (const c of colliders) {
+      const b = c.userData.__xz;
+      if (b && (x < b[0] || x > b[1] || z < b[2] || z > b[3])) continue;
+      _near.push(c);
+    }
+    if (_near.length) {
+      ray.set(new THREE.Vector3(x, fromY, z), DOWN);
+      ray.far = far;
+      const hit = ray.intersectObjects(_near, false)[0];
+      if (hit && (best === null || hit.point.y > best)) best = hit.point.y;
+    }
+    return best;
   };
 
   addEventListener('keydown', e => {
@@ -618,10 +677,23 @@ async function boot() {
   }
   const present = () => (composer ? composer.render() : renderer.render(scene, camera));
 
-  const colliders = [];
-  scene.traverse(n => { if (n.isMesh) colliders.push(n); });
+  // Terrain is sampled, everything else is raycast — and only the meshes whose
+  // footprint actually contains the point, which on a scene like the bundled one
+  // is two or three of a hundred and twelve.
+  const colliders = [], fields = [];
+  const _b = new THREE.Box3();
+  scene.traverse(n => {
+    if (!n.isMesh) return;
+    if (n.userData?.kind === 'terrain') {
+      const f = heightfield(n);
+      if (f) { fields.push(f); return; }         // no field: fall through and raycast it
+    }
+    _b.setFromObject(n);
+    colliders.push(n);
+    n.userData.__xz = [_b.min.x, _b.max.x, _b.min.z, _b.max.z];
+  });
 
-  const ctrl = makeController(camera, solids, colliders, manifest.spawn);
+  const ctrl = makeController(camera, solids, colliders, manifest.spawn, fields);
   ctrl.step(0);
 
   addEventListener('resize', () => {
@@ -798,6 +870,96 @@ async function boot() {
   /** bounds() is the whole scene; bounds({subject:true}) drops terrain-sized
    *  slabs (a ground plane covering most of the footprint), so auto-framing
    *  looks at the buildings and not at 3600 m2 of grass. */
+  /** Flood-fill the space a person can actually walk to, starting from spawn.
+   *  The audit proves the spawn point is not inside a wall; it says nothing
+   *  about whether the building has a way in, whether a room is sealed, or
+   *  whether half the scene is behind geometry nobody can get past. A scene can
+   *  audit clean, photograph well and still be a diorama.
+   *
+   *  Every edge is walked with the real controller, so a step that a person
+   *  could not take — too high, too narrow, off a drop — is not an edge. */
+  window.__reach = (o = {}) => {
+    // One walk should cover about one cell: the controller does 2.6 m/s, so
+    // 0.42 s is 1.1 m. Eight directions and a 0.7 m cell put a million
+    // controller steps through a collision test and blew a five-minute budget on
+    // the bundled scene; four directions at 1.0 m answer the same question.
+    const cell = o.cell ?? 1.0, sec = o.sec ?? 0.42, dt = o.dt ?? 1 / 60;
+    const budget = o.budget ?? 40000;
+    const radius = o.radius ?? 45;          // open terrain is unbounded; the question is not
+    const start = o.from ?? (manifest.spawn?.position ?? [0, EYE, 0]);
+    const yaws = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+    const n = Math.max(1, Math.round(sec / dt));
+    const seen = new Map(), q = [];
+    const key = (x, z) => Math.round(x / cell) + ',' + Math.round(z / cell);
+    const push = (x, z, y) => {
+      const k = key(x, z);
+      if (seen.has(k)) return false;
+      seen.set(k, [x, z, y]); q.push([x, z, y]); return true;
+    };
+    const g0 = window.__groundAt(start[0], start[2], start[1]);
+    push(start[0], start[2], g0 == null ? start[1] - EYE : g0);
+    let edges = 0, head = 0;
+    while (head < q.length && edges < budget) {
+      const [x, z, y] = q[head++];
+      for (const yaw of yaws) {
+        edges++;
+        window.__place([x, y + EYE, z], yaw);
+        ctrl.state.keys.add('KeyW');
+        for (let i = 0; i < n; i++) ctrl.step(dt);
+        ctrl.state.keys.delete('KeyW');
+        const nx = ctrl.pos.x, nz = ctrl.pos.z;
+        if (!ctrl.state.onGround) continue;                       // stepped off something
+        if (Math.hypot(nx - x, nz - z) < cell * 0.55) continue;   // walked into a wall
+        if (Math.hypot(nx - start[0], nz - start[2]) > radius) continue;
+        push(nx, nz, ctrl.pos.y - EYE);
+      }
+    }
+    // How near can a person get to each named thing?
+    const cells = [...seen.values()];
+    const objects = [];
+    scene.traverse(nd => {
+      // The manifest id is the node's NAME (see buildScene). userData.id exists
+      // only on the solid records the collider list keeps, so scanning meshes
+      // for it found nothing at all and the report said every object was
+      // reachable, having looked at none of them.
+      const id = nd.name;
+      if (!id || !nd.isMesh || !nd.userData?.__manifest) return;
+      const b = new THREE.Box3().setFromObject(nd);
+      if (!isFinite(b.min.x)) return;
+      const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2;
+      const hx = (b.max.x - b.min.x) / 2, hz = (b.max.z - b.min.z) / 2;
+      let best = Infinity;
+      for (const [x, z] of cells) {
+        const dx = Math.max(0, Math.abs(x - cx) - hx), dz = Math.max(0, Math.abs(z - cz) - hz);
+        const d = Math.hypot(dx, dz);
+        if (d < best) best = d;
+      }
+      objects.push({ id, near: +best.toFixed(2), y: +b.min.y.toFixed(2),
+                     size: +Math.max(b.max.x - b.min.x, b.max.z - b.min.z).toFixed(2) });
+    });
+    // The question the audit cannot answer: is there anywhere to stand INSIDE
+    // what you built? A sealed building — no door, or a doorway too narrow to
+    // walk through — audits clean, photographs well, and is a diorama.
+    const sub = window.__bounds({ subject: true });
+    let inside = 0;
+    if (sub && isFinite(sub.min[0])) {
+      const pad = 0.4;
+      for (const [x, z] of cells)
+        if (x > sub.min[0] + pad && x < sub.max[0] - pad &&
+            z > sub.min[2] + pad && z < sub.max[2] - pad) inside++;
+    }
+    let xs = cells.map(c => c[0]), zs = cells.map(c => c[1]);
+    return {
+      inside, subject: sub ? { min: sub.min, max: sub.max } : null,
+      cells: seen.size, edges, exhausted: head >= q.length,
+      area: +(seen.size * cell * cell).toFixed(1),
+      extent: cells.length ? [+(Math.max(...xs) - Math.min(...xs)).toFixed(1),
+                              +(Math.max(...zs) - Math.min(...zs)).toFixed(1)] : [0, 0],
+      objects: objects.sort((a, b) => b.near - a.near),
+      points: o.points ? cells.map(c => [+c[0].toFixed(2), +c[1].toFixed(2)]) : undefined,
+    };
+  };
+
   window.__bounds = ({ subject = false, visibleOnly = false } = {}) => {
     const full = new THREE.Box3().setFromObject(scene);
     if (!subject) return boxOf(full);
